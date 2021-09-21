@@ -15,7 +15,7 @@ This package requires Python 3.5+
 To be used from your experiment, this package must be installed in the Python
 environment where [chaostoolkit][] already lives.
 
-### Install via Pip
+### Install via pip
 
 ```
 $ pip install -U chaostoolkit-az-failure-aws
