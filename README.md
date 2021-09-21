@@ -21,15 +21,6 @@ environment where [chaostoolkit][] already lives.
 $ pip install -U aws-az-failure-chaostoolkit
 ```
 
-### Install via building the wheel
-
-```
-$ pip install wheel
-$ python setup.py bdist_wheel
-$ cd dist
-$ pip install -U aws_az_failure_chaostoolkit-0.1.0-py3-none-any.whl
-```
-
 ## Usage
 
 To use the probes and actions from this package, add the following to your
