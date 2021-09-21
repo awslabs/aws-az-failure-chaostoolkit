@@ -1,12 +1,12 @@
 #!/usr/bin/env python
-"""chaostoolkit-az-failure-aws extension builder and installer"""
+"""aws-az-failure-chaostoolkit extension builder and installer"""
 
 import sys
 import io
 
 import setuptools
 
-name = 'chaostoolkit-az-failure-aws'
+name = 'aws-az-failure-chaostoolkit'
 desc = 'Custom Chaos Toolkit extension to simulate AZ failure on AWS resources'
 
 with io.open('README.md', encoding='utf-8') as strm:
@@ -29,6 +29,7 @@ author = "Farhan Angullia"
 author_email = 'angullia@amazon.com'
 license = 'Apache License Version 2.0'
 packages = setuptools.find_packages(include=['azchaosaws', 'azchaosaws.*'])
+url = 'https://github.com/aws-samples/aws-az-failure-chaostoolkit'
 
 needs_pytest = set(['pytest', 'test']).intersection(sys.argv)
 pytest_runner = ['pytest_runner'] if needs_pytest else []
@@ -43,12 +44,13 @@ with io.open('requirements.txt') as f:
 
 setup_params = dict(
     name=name,
-    version='0.5.7',
+    version='0.1.0',
     description=desc,
     long_description=long_desc,
     classifiers=classifiers,
     author=author,
     author_email=author_email,
+    url = url,
     license=license,
     packages=packages,
     include_package_data=True,

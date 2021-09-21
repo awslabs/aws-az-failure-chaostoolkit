@@ -18,7 +18,7 @@ environment where [chaostoolkit][] already lives.
 ### Install via pip
 
 ```
-$ pip install -U chaostoolkit-az-failure-aws
+$ pip install -U aws-az-failure-chaostoolkit
 ```
 
 ### Install via building the wheel
@@ -27,7 +27,7 @@ $ pip install -U chaostoolkit-az-failure-aws
 $ pip install wheel
 $ python setup.py bdist_wheel
 $ cd dist
-$ pip install -U chaostoolkit_az_failure_aws-0.1.0-py3-none-any.whl
+$ pip install -U aws_az_failure_chaostoolkit-0.1.0-py3-none-any.whl
 ```
 
 ## Usage
@@ -215,7 +215,7 @@ To 'rollback' the changes made by the `fail_az` action, you can use `recover_az`
 
 Please explore the code to see existing probes, actions and supported capabilities.
 
-Alternatively, you can run `chaos discover chaostoolkit-az-failure-aws` to view the list of supported actions and probes along with their required and optional arguments for each service in the generated `discovery.json` file.
+Alternatively, you can run `chaos discover aws-az-failure-chaostoolkit` to view the list of supported actions and probes along with their required and optional arguments for each service in the generated `discovery.json` file.
 
 Do also note that by default, the `dry_run` argument for the functions are set to `True`. Set it to `False` if you want the actions to make changes your resources.
 

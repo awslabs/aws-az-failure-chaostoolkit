@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-"""Top-level package for chaostoolkit-az-failure-aws."""
+"""Top-level package for aws-az-failure-chaostoolkit."""
 
 import os
 from typing import List
@@ -13,7 +13,7 @@ from chaoslib.types import (Configuration, DiscoveredActivities,
                              Discovery)
 from logzero import logger
 
-__version__ = '0.5.7'
+__version__ = '0.1.0'
 __all__ = ["__version__", "discover", "client"]
 
 
@@ -37,10 +37,10 @@ def client(resource_name: str, configuration: Configuration = None):
 
 
 def discover(discover_system: bool = True) -> Discovery:
-    logger.info("Discovering capabilities from chaostoolkit-az-failure-aws")
+    logger.info("Discovering capabilities from aws-az-failure-chaostoolkit")
 
     discovery = initialize_discovery_result(
-        "chaostoolkit-az-failure-aws", __version__, "aws")
+        "aws-az-failure-chaostoolkit", __version__, "aws")
     discovery["activities"].extend(load_exported_activities())
 
     return discovery
