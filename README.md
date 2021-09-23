@@ -1,6 +1,9 @@
  # Chaos Toolkit AZ Failure Extension for AWS
 
 [![Python versions](https://img.shields.io/badge/python-3.5+-blue.svg)](https://www.python.org/downloads/release/python-360/)
+[![PyPi Version](https://img.shields.io/pypi/v/aws-az-failure-chaostoolkit.svg)](https://pypi.org/project/aws-az-failure-chaostoolkit/#history)
+[![Downloads](https://pepy.tech/badge/aws-az-failure-chaostoolkit)](https://pepy.tech/project/aws-az-failure-chaostoolkit)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
 This project is a collection of [actions][], gathered as an
 extension to the [Chaos Toolkit][chaostoolkit] to test the resiliency of your applications hosted on AWS.

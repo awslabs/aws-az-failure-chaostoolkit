@@ -29,7 +29,7 @@ author = "Farhan Angullia"
 author_email = 'angullia@amazon.com'
 license = 'Apache License Version 2.0'
 packages = setuptools.find_packages(include=['azchaosaws', 'azchaosaws.*'])
-url = 'https://github.com/aws-samples/aws-az-failure-chaostoolkit'
+url = 'https://github.com/awslabs/aws-az-failure-chaostoolkit'
 download_url = 'https://pypi.python.org/pypi/aws-az-failure-chaostoolkit'
 
 needs_pytest = set(['pytest', 'test']).intersection(sys.argv)
