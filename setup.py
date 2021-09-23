@@ -13,7 +13,7 @@ with io.open('README.md', encoding='utf-8') as strm:
     long_desc = strm.read()
 
 classifiers = [
-    'Development Status :: 4 - Beta',
+    'Development Status :: 5 - Production/Stable',
     'Intended Audience :: Developers',
     'License :: Freely Distributable',
     'Operating System :: OS Independent',
