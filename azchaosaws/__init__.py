@@ -13,7 +13,7 @@ from chaoslib.types import (Configuration, DiscoveredActivities,
                              Discovery)
 from logzero import logger
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 __all__ = ["__version__", "discover", "client"]
 
 
