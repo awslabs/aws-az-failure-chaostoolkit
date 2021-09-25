@@ -6,14 +6,12 @@ import os
 from typing import List
 
 import boto3
-from chaoslib.discovery.discover import (discover_actions,
-                                         initialize_discovery_result)
+from chaoslib.discovery.discover import discover_actions, initialize_discovery_result
 from chaoslib.exceptions import InterruptExecution
-from chaoslib.types import (Configuration, DiscoveredActivities,
-                             Discovery)
+from chaoslib.types import Configuration, DiscoveredActivities, Discovery
 from logzero import logger
 
-__version__ = '0.1.1'
+__version__ = "0.1.1"
 __all__ = ["__version__", "discover", "client"]
 
 
@@ -40,7 +38,8 @@ def discover(discover_system: bool = True) -> Discovery:
     logger.info("Discovering capabilities from aws-az-failure-chaostoolkit")
 
     discovery = initialize_discovery_result(
-        "aws-az-failure-chaostoolkit", __version__, "aws")
+        "aws-az-failure-chaostoolkit", __version__, "aws"
+    )
     discovery["activities"].extend(load_exported_activities())
 
     return discovery

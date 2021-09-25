@@ -18,16 +18,21 @@ __all__ = ["fail_az"]
 
 
 @args_fmt
-def fail_az(az: str = None, dry_run: bool = None, replication_groups: List[Dict[str, any]] = None, tags: List[Dict[str, str]] = [{"Key": "AZ_FAILURE", "Value": "True"}],
-            configuration: Configuration = None) -> Dict[str, Any]:
+def fail_az(
+    az: str = None,
+    dry_run: bool = None,
+    replication_groups: List[Dict[str, any]] = None,
+    tags: List[Dict[str, str]] = [{"Key": "AZ_FAILURE", "Value": "True"}],
+    configuration: Configuration = None,
+) -> Dict[str, Any]:
     """
     This function forces a failover for elasticache. If it runs in cluster mode, it forces over for every shard (max up to 5 in every 24hours). Raises APICallRateForCustomerExceeded if more than 5 request for test_failover per 24hours.
 
     Note: You will need to provide the replicationgroupdids for clusters where Cluster mode is enabled. Otherwise, they will not be affected. Also, for these nodes,
     the node will need to failover successfully before the other node can failover. (Handle this on a logical layer below)
 
-    Note: If there are multiple shards in a same Redis cluster (cluster mode enabled) that will need to failover (if their primary nodes are in same AZ), the first 
-    node replacement must complete before a subsequent test_failover call can be made. Therefore, the function leverages on describe_events to wait for the first 
+    Note: If there are multiple shards in a same Redis cluster (cluster mode enabled) that will need to failover (if their primary nodes are in same AZ), the first
+    node replacement must complete before a subsequent test_failover call can be made. Therefore, the function leverages on describe_events to wait for the first
     primary node to complete first.
     https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/elasticache.html#ElastiCache.Client.test_failover
 
@@ -59,10 +64,10 @@ def fail_az(az: str = None, dry_run: bool = None, replication_groups: List[Dict[
     {
         "AvailabilityZone": str,
         "DryRun": bool,
-        "Shards": 
+        "Shards":
                 {
                     "Success": [
-                        {   
+                        {
                             "CacheClusterId": str,
                             "ReplicationGroupId": str,
                             "NodeGroupId": str
@@ -84,35 +89,44 @@ def fail_az(az: str = None, dry_run: bool = None, replication_groups: List[Dict[
     """
 
     if dry_run is None:
-        raise FailedActivity('To simulate AZ failure, you must specify'
-                             'a dry_run boolean parameter to indicate if you want to run read-only operations (Accepted values: true | false)')
+        raise FailedActivity(
+            "To simulate AZ failure, you must specify"
+            "a dry_run boolean parameter to indicate if you want to run read-only operations (Accepted values: true | false)"
+        )
 
     if not az:
-        raise FailedActivity('To simulate AZ failure, you must specify '
-                             'an Availability Zone')
+        raise FailedActivity(
+            "To simulate AZ failure, you must specify " "an Availability Zone"
+        )
 
-    ec_client = client('elasticache', configuration)
-    fail_az_state = {"AvailabilityZone": az, "DryRun": dry_run, "Shards": {
-        "Success": [], "Failed": []}}
+    ec_client = client("elasticache", configuration)
+    fail_az_state = {
+        "AvailabilityZone": az,
+        "DryRun": dry_run,
+        "Shards": {"Success": [], "Failed": []},
+    }
 
     # Set args for waiter
     delay, max_attempts = 30, 30
     cache_node_id = "0001"
 
     # Get cluster mode enabled|disabled nodes from replication_groups, tags and az provided
-    cluster_mode_mixed_nodes = filter_primary_nodes_by_cluster_id_and_az_and_tags(az=az, replication_groups=replication_groups, tags=tags,
-                                                                                  client=ec_client)
+    cluster_mode_mixed_nodes = filter_primary_nodes_by_cluster_id_and_az_and_tags(
+        az=az, replication_groups=replication_groups, tags=tags, client=ec_client
+    )
 
     # Get cluster mode disabled nodes from az and tags
     cluster_mode_disabled_nodes = get_elasticache_primary_nodes_by_az_and_tags(
-        az, tags, ec_client)
+        az, tags, ec_client
+    )
 
     # Get union of cluster_mode_mixed_nodes and cluster_mode_disabled_nodes
     nodes = []
-    if (cluster_mode_mixed_nodes and cluster_mode_disabled_nodes):
-        nodes = cluster_mode_mixed_nodes + \
-            [i for i in cluster_mode_disabled_nodes if i not in cluster_mode_mixed_nodes]
-    elif (cluster_mode_mixed_nodes and not cluster_mode_disabled_nodes):
+    if cluster_mode_mixed_nodes and cluster_mode_disabled_nodes:
+        nodes = cluster_mode_mixed_nodes + [
+            i for i in cluster_mode_disabled_nodes if i not in cluster_mode_mixed_nodes
+        ]
+    elif cluster_mode_mixed_nodes and not cluster_mode_disabled_nodes:
         nodes = cluster_mode_mixed_nodes[:]
     else:
         nodes = cluster_mode_disabled_nodes[:]
@@ -120,10 +134,16 @@ def fail_az(az: str = None, dry_run: bool = None, replication_groups: List[Dict[
     # Log as warning say cant exceed more than 5 primary nodes per 24 hours rolling window
     if len(nodes) > 5:
         raise FailedActivity(
-            "[{}] {} primary nodes found in az {}. Should not exceed more than 5 due to hard limits of ElastiCache API.".format("ECache", len(nodes), az))
+            "[{}] {} primary nodes found in az {}. Should not exceed more than 5 due to hard limits of ElastiCache API.".format(
+                "ECache", len(nodes), az
+            )
+        )
 
-    logger.warning("[{}] {} primary nodes found in az {}. If failover exceeds more than 5 within the last 24hours, it will fail and hit hard limits.".format(
-        "ECache", len(nodes), az))
+    logger.warning(
+        "[{}] {} primary nodes found in az {}. If failover exceeds more than 5 within the last 24hours, it will fail and hit hard limits.".format(
+            "ECache", len(nodes), az
+        )
+    )
 
     # Transform dataset to map
     cluster_nodes_lookup, non_cluster_nodes_lookup = {}, {}
@@ -137,17 +157,18 @@ def fail_az(az: str = None, dry_run: bool = None, replication_groups: List[Dict[
         else:
             if not non_cluster_nodes_lookup.get(node["ReplicationGroupId"], None):
                 non_cluster_nodes_lookup[node["ReplicationGroupId"]] = []
-                non_cluster_nodes_lookup[node["ReplicationGroupId"]].append(
-                    node)
+                non_cluster_nodes_lookup[node["ReplicationGroupId"]].append(node)
             else:
-                non_cluster_nodes_lookup[node["ReplicationGroupId"]].append(
-                    node)
+                non_cluster_nodes_lookup[node["ReplicationGroupId"]].append(node)
 
     # Log as warning if more than 1 node groups in cluster_nodes_lookup to be failed over in same replication group (cluster) as first node failover must be completed before going to next
     for k in cluster_nodes_lookup.keys():
         if len(cluster_nodes_lookup[k]) > 1:
-            logger.warning("[ECache] ({}) nodegroups for ({}) found in az ({}). The failover for the first node must be completed before failing over the remaining nodes in sequence. Please expect a delay...".format(
-                len(cluster_nodes_lookup[k]), k, az))
+            logger.warning(
+                "[ECache] ({}) nodegroups for ({}) found in az ({}). The failover for the first node must be completed before failing over the remaining nodes in sequence. Please expect a delay...".format(
+                    len(cluster_nodes_lookup[k]), k, az
+                )
+            )
 
     success_failover_nodes, failed_nodes = [], []
 
@@ -156,39 +177,48 @@ def fail_az(az: str = None, dry_run: bool = None, replication_groups: List[Dict[
         nodes = non_cluster_nodes_lookup[replication_group_id]
         for node in nodes:
             try:
-                logger.warning('[ECache] [{}] Based on config provided, ElastiCache {} {} will failover (cluster mode disabled)'.format("ECache",
-                                                                                                                                        node["ReplicationGroupId"], node["NodeGroupId"]))
+                logger.warning(
+                    "[ECache] [{}] Based on config provided, ElastiCache {} {} will failover (cluster mode disabled)".format(
+                        "ECache", node["ReplicationGroupId"], node["NodeGroupId"]
+                    )
+                )
                 if not dry_run:
                     # [WOP]
                     response = ec_client.test_failover(
                         ReplicationGroupId=node["ReplicationGroupId"],
-                        NodeGroupId=node["NodeGroupId"]
+                        NodeGroupId=node["NodeGroupId"],
                     )
                     logger.debug(response)
-                    
+
                 success_failover_nodes.append(node)
             except Exception as e:
                 failed_nodes.append(node)
                 logger.error(
-                    "[ECache] Failed issuing a test failover for {} {}: {}".format(node["ReplicationGroupId"], node["NodeGroupId"], str(e)))
+                    "[ECache] Failed issuing a test failover for {} {}: {}".format(
+                        node["ReplicationGroupId"], node["NodeGroupId"], str(e)
+                    )
+                )
 
     # Failover cluster mode enabled nodes (includes waiter)
     for replication_group_id in cluster_nodes_lookup.keys():
         nodes = cluster_nodes_lookup[replication_group_id]
         # Multiply the delay time for slack
-        duration = (delay/60) * 2
+        duration = (delay / 60) * 2
         while duration < 1:
             duration *= 2
         duration = int(duration)
         for count, node in enumerate(nodes, start=1):
             try:
-                logger.warning('[{}] Based on config provided, ElastiCache {} {} will failover (cluster mode enabled)'.format("ECache",
-                                                                                                                              node["ReplicationGroupId"], node["NodeGroupId"]))
+                logger.warning(
+                    "[{}] Based on config provided, ElastiCache {} {} will failover (cluster mode enabled)".format(
+                        "ECache", node["ReplicationGroupId"], node["NodeGroupId"]
+                    )
+                )
                 if not dry_run:
                     # [WOP]
                     response = ec_client.test_failover(
                         ReplicationGroupId=node["ReplicationGroupId"],
-                        NodeGroupId=node["NodeGroupId"]
+                        NodeGroupId=node["NodeGroupId"],
                     )
                     logger.debug(response)
 
@@ -198,41 +228,72 @@ def fail_az(az: str = None, dry_run: bool = None, replication_groups: List[Dict[
                     # [WOP]
                     # Wait for node replacement to complete
                     try:
-                        logger.warning("[ECache] [Node count: ({})] [Waiter] Starting to wait for node replacement of ({}) to complete with delay({}), max_attempts({}) and events duration({})...".format(
-                            count, node["CacheClusterId"], delay, max_attempts, duration))
+                        logger.warning(
+                            "[ECache] [Node count: ({})] [Waiter] Starting to wait for node replacement of ({}) to complete with delay({}), max_attempts({}) and events duration({})...".format(
+                                count,
+                                node["CacheClusterId"],
+                                delay,
+                                max_attempts,
+                                duration,
+                            )
+                        )
                         waiter = cluster_available_waiter(
-                            client=ec_client, count=count, cache_node_id=cache_node_id, delay=delay, max_attempts=max_attempts)
+                            client=ec_client,
+                            count=count,
+                            cache_node_id=cache_node_id,
+                            delay=delay,
+                            max_attempts=max_attempts,
+                        )
                         begin = process_time()
                         waiter.wait(
-                            SourceIdentifier=node["CacheClusterId"], SourceType='cache-cluster', Duration=duration)
+                            SourceIdentifier=node["CacheClusterId"],
+                            SourceType="cache-cluster",
+                            Duration=duration,
+                        )
                         end = process_time()
                         # Get elapsed in seconds and round up
                         elapsed_time = math.ceil(begin - end)
-                        logger.warning("[ECache] [Node count: ({})] [Waiter] Node replacement for ({}) completed...".format(
-                            count, node["CacheClusterId"]))
                         logger.warning(
-                            "[ECache] [Node count: ({})] Redundant sleep for 15 seconds...".format(count))
+                            "[ECache] [Node count: ({})] [Waiter] Node replacement for ({}) completed...".format(
+                                count, node["CacheClusterId"]
+                            )
+                        )
+                        logger.warning(
+                            "[ECache] [Node count: ({})] Redundant sleep for 15 seconds...".format(
+                                count
+                            )
+                        )
                         sleep(15)
                         elapsed_time += 15
                         # Convert to minutes and round up
-                        elapsed_time = math.ceil(elapsed_time/60)
+                        elapsed_time = math.ceil(elapsed_time / 60)
                         duration += elapsed_time  # Extend duration
                     except WaiterError as e:
                         if "Max attempts exceeded" in str(e):
-                            logger.error("[ECache] Waiting for node replacement not completed after {} seconds as max attemps exceeded".format(
-                                delay * max_attempts))
+                            logger.error(
+                                "[ECache] Waiting for node replacement not completed after {} seconds as max attemps exceeded".format(
+                                    delay * max_attempts
+                                )
+                            )
                     ####
             except Exception as e:
                 failed_nodes.append(node)
                 logger.error(
-                    "[ECache] Failed issuing a test failover for {} {}: {}".format(node["ReplicationGroupId"], node["NodeGroupId"], str(e)))
+                    "[ECache] Failed issuing a test failover for {} {}: {}".format(
+                        node["ReplicationGroupId"], node["NodeGroupId"], str(e)
+                    )
+                )
 
     if not success_failover_nodes:
         logger.warning(
-            "[ECache] No primary nodes to failover... Ensure that the nodes in the AZ you specified are tagged with the tag filter you provided or tagged with the default value.")
+            "[ECache] No primary nodes to failover... Ensure that the nodes in the AZ you specified are tagged with the tag filter you provided or tagged with the default value."
+        )
     else:
         logger.info(
-            "[ECache] Primary node(s) that were forced to failover: {} count({})".format(success_failover_nodes, len(success_failover_nodes)))
+            "[ECache] Primary node(s) that were forced to failover: {} count({})".format(
+                success_failover_nodes, len(success_failover_nodes)
+            )
+        )
 
     # Add to state
     fail_az_state["Shards"]["Success"] = success_failover_nodes
@@ -241,9 +302,13 @@ def fail_az(az: str = None, dry_run: bool = None, replication_groups: List[Dict[
     return fail_az_state
 
 
-def filter_primary_nodes_by_cluster_id_and_az_and_tags(az: str, replication_groups: List[Dict[str, any]], tags: List[Dict[str, str]],
-                                                       client: boto3.client) -> List[Dict[str, Any]]:
-    """ Gets all shards where primary nodes are in target AZ and elasticache tagged. This is for both cluster mode enabled and disabled.
+def filter_primary_nodes_by_cluster_id_and_az_and_tags(
+    az: str,
+    replication_groups: List[Dict[str, any]],
+    tags: List[Dict[str, str]],
+    client: boto3.client,
+) -> List[Dict[str, Any]]:
+    """Gets all shards where primary nodes are in target AZ and elasticache tagged. This is for both cluster mode enabled and disabled.
 
     Criteria to be in scope:
         AutomaticFailover enabled
@@ -267,52 +332,86 @@ def filter_primary_nodes_by_cluster_id_and_az_and_tags(az: str, replication_grou
 
     for replication_group_input in replication_groups:
         replication_groups_response = client.describe_replication_groups(
-            ReplicationGroupId=replication_group_input["replication_group_id"])["ReplicationGroups"]
+            ReplicationGroupId=replication_group_input["replication_group_id"]
+        )["ReplicationGroups"]
         for rg in replication_groups_response:
-            tag_list = client.list_tags_for_resource(
-                ResourceName=rg["ARN"]
-            )["TagList"]
+            tag_list = client.list_tags_for_resource(ResourceName=rg["ARN"])["TagList"]
             # If elasticache is tagged
             if all(t in tag_list for t in tags):
-                if rg['AutomaticFailover'] == 'enabled':
+                if rg["AutomaticFailover"] == "enabled":
                     # If clustermode enabled
-                    if rg['ClusterEnabled']:
-                        for nodes in rg['NodeGroups']:
-                            for node in nodes['NodeGroupMembers']:
+                    if rg["ClusterEnabled"]:
+                        for nodes in rg["NodeGroups"]:
+                            for node in nodes["NodeGroupMembers"]:
                                 # find if primary node in blackout AZ
-                                if any(node.get('CacheClusterId', None) == id for id in replication_group_input["cache_cluster_ids"]) and node['PreferredAvailabilityZone'] == az:
+                                if (
+                                    any(
+                                        node.get("CacheClusterId", None) == id
+                                        for id in replication_group_input[
+                                            "cache_cluster_ids"
+                                        ]
+                                    )
+                                    and node["PreferredAvailabilityZone"] == az
+                                ):
                                     logger.info(
-                                        '[ECache] Elasticache with ReplicationGroupId ({}) | CacheClusterId ({}) | NodeGroupId ({}) found with primary node in ({})'.format(rg['ReplicationGroupId'], node['CacheClusterId'],
-                                                                                                                                                                            nodes[
-                                            'NodeGroupId'],
-                                            node['PreferredAvailabilityZone'])
+                                        "[ECache] Elasticache with ReplicationGroupId ({}) | CacheClusterId ({}) | NodeGroupId ({}) found with primary node in ({})".format(
+                                            rg["ReplicationGroupId"],
+                                            node["CacheClusterId"],
+                                            nodes["NodeGroupId"],
+                                            node["PreferredAvailabilityZone"],
+                                        )
                                     )
                                     results.append(
-                                        {"CacheClusterId": node["CacheClusterId"], "ReplicationGroupId": rg['ReplicationGroupId'], "NodeGroupId": nodes['NodeGroupId'], "ClusterEnabled": rg['ClusterEnabled']})
+                                        {
+                                            "CacheClusterId": node["CacheClusterId"],
+                                            "ReplicationGroupId": rg[
+                                                "ReplicationGroupId"
+                                            ],
+                                            "NodeGroupId": nodes["NodeGroupId"],
+                                            "ClusterEnabled": rg["ClusterEnabled"],
+                                        }
+                                    )
                     else:  # If clusterdisabled
                         # find if primary node in blackout AZ
-                        for nodes in rg['NodeGroups']:
-                            for node in nodes['NodeGroupMembers']:
-                                if node['CurrentRole'] == 'primary' and node['PreferredAvailabilityZone'] == az:
+                        for nodes in rg["NodeGroups"]:
+                            for node in nodes["NodeGroupMembers"]:
+                                if (
+                                    node["CurrentRole"] == "primary"
+                                    and node["PreferredAvailabilityZone"] == az
+                                ):
                                     logger.info(
-                                        '[ECache] Elasticache with ReplicationGroupId ({}) | NodeGroupId ({}) found with primary node in ({})'.format(rg['ReplicationGroupId'],
-                                                                                                                                                      nodes[
-                                            'NodeGroupId'],
-                                            node['PreferredAvailabilityZone'])
+                                        "[ECache] Elasticache with ReplicationGroupId ({}) | NodeGroupId ({}) found with primary node in ({})".format(
+                                            rg["ReplicationGroupId"],
+                                            nodes["NodeGroupId"],
+                                            node["PreferredAvailabilityZone"],
+                                        )
                                     )
                                     results.append(
-                                        {"CacheClusterId": node["CacheClusterId"], "ReplicationGroupId": rg['ReplicationGroupId'], "NodeGroupId": nodes['NodeGroupId'], "ClusterEnabled": rg['ClusterEnabled']})
+                                        {
+                                            "CacheClusterId": node["CacheClusterId"],
+                                            "ReplicationGroupId": rg[
+                                                "ReplicationGroupId"
+                                            ],
+                                            "NodeGroupId": nodes["NodeGroupId"],
+                                            "ClusterEnabled": rg["ClusterEnabled"],
+                                        }
+                                    )
 
     if not results:
         logger.warning(
-            '[ECache] No primary ElastiCache (tagged and cluster mode enabled|disabled) node(s) found for ({}) in AZ {}.'.format(str(replication_groups), az))
+            "[ECache] No primary ElastiCache (tagged and cluster mode enabled|disabled) node(s) found for ({}) in AZ {}.".format(
+                str(replication_groups), az
+            )
+        )
 
     return results
 
+
 # Only for cluster mode disabled
-def get_elasticache_primary_nodes_by_az_and_tags(az: str, tags: List[Dict[str, str]],
-                                                 client: boto3.client) -> List[Dict[str, Any]]:
-    """ Gets all shards where primary nodes are in target AZ and consists of the tags provided. This is only for cluster mode disabled.
+def get_elasticache_primary_nodes_by_az_and_tags(
+    az: str, tags: List[Dict[str, str]], client: boto3.client
+) -> List[Dict[str, Any]]:
+    """Gets all shards where primary nodes are in target AZ and consists of the tags provided. This is only for cluster mode disabled.
 
     Returns:
         [
@@ -326,31 +425,49 @@ def get_elasticache_primary_nodes_by_az_and_tags(az: str, tags: List[Dict[str, s
         ]
     """
 
-    paginator = client.get_paginator('describe_replication_groups')
+    paginator = client.get_paginator("describe_replication_groups")
 
     results = []
     for p in paginator.paginate():
-        for replication in p['ReplicationGroups']:
-            tag_list = client.list_tags_for_resource(
-                ResourceName=replication["ARN"]
-            )["TagList"]
+        for replication in p["ReplicationGroups"]:
+            tag_list = client.list_tags_for_resource(ResourceName=replication["ARN"])[
+                "TagList"
+            ]
             if all(t in tag_list for t in tags):
-                if replication['AutomaticFailover'] == 'enabled' and replication['ClusterEnabled'] == False:
+                if (
+                    replication["AutomaticFailover"] == "enabled"
+                    and replication["ClusterEnabled"] is False
+                ):
                     # find if primary node in blackout AZ
-                    for nodes in replication['NodeGroups']:
-                        for node in nodes['NodeGroupMembers']:
-                            if node['CurrentRole'] == 'primary' and node['PreferredAvailabilityZone'] == az:
+                    for nodes in replication["NodeGroups"]:
+                        for node in nodes["NodeGroupMembers"]:
+                            if (
+                                node["CurrentRole"] == "primary"
+                                and node["PreferredAvailabilityZone"] == az
+                            ):
                                 logger.info(
-                                    '[ECache] Elasticache with ReplicationGroupId ({}) | NodeGroupId ({}) found with primary node in ({})'.format(replication['ReplicationGroupId'],
-                                                                                                                                                  nodes[
-                                        'NodeGroupId'],
-                                        node['PreferredAvailabilityZone'])
+                                    "[ECache] Elasticache with ReplicationGroupId ({}) | NodeGroupId ({}) found with primary node in ({})".format(
+                                        replication["ReplicationGroupId"],
+                                        nodes["NodeGroupId"],
+                                        node["PreferredAvailabilityZone"],
+                                    )
                                 )
                                 results.append(
-                                    {"CacheClusterId": node["CacheClusterId"], "ReplicationGroupId": replication['ReplicationGroupId'], "NodeGroupId": nodes['NodeGroupId'], "ClusterEnabled": replication['ClusterEnabled']})
+                                    {
+                                        "CacheClusterId": node["CacheClusterId"],
+                                        "ReplicationGroupId": replication[
+                                            "ReplicationGroupId"
+                                        ],
+                                        "NodeGroupId": nodes["NodeGroupId"],
+                                        "ClusterEnabled": replication["ClusterEnabled"],
+                                    }
+                                )
 
     if not results:
         logger.warning(
-            '[ECache] No primary ElastiCache (cluster mode disabled) node(s) found in AZ {}.'.format(az))
+            "[ECache] No primary ElastiCache (cluster mode disabled) node(s) found in AZ {}.".format(
+                az
+            )
+        )
 
     return results

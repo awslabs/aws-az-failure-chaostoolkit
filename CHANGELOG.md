@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Black and flake8
+
 ## [0.1.1][] - 2021-09-24
 [0.1.1]: https://github.com/awslabs/aws-az-failure-chaostoolkit/tree/v0.1.1
 
