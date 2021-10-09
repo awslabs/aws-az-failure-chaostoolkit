@@ -9,12 +9,16 @@ install-dev: install
 
 .PHONY: fmt
 fmt:
-	black azchaosaws/ tests/
+	black .
 
 .PHONY: lint
 lint: fmt
 	flake8 azchaosaws/ tests/
 
-.PHONY: tests
-tests: fmt
+.PHONY: test
+test: fmt
 	python setup.py test
+
+.PHONY: build
+build: install-dev
+	python setup.py bdist_wheel

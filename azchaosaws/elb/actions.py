@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 import json
 import os
-from typing import Any, Dict, List
 
 import boto3
+
 from logzero import logger
+from typing import Any, Dict, List
 from chaoslib.exceptions import FailedActivity
 from chaoslib.types import Configuration
 from azchaosaws import client
@@ -19,7 +20,7 @@ def fail_az(
     az: str = None,
     dry_run: bool = None,
     lb_names: List[str] = None,
-    tags: List[Dict[str, any]] = [{"Key": "AZ_FAILURE", "Value": "True"}],
+    tags: List[Dict[str, Any]] = [{"Key": "AZ_FAILURE", "Value": "True"}],
     state_path: str = "fail_az.{}.json".format(__package__.split(".", 1)[1]),
     configuration: Configuration = None,
 ) -> Dict[str, Any]:
@@ -39,37 +40,33 @@ def fail_az(
 
     Parameters:
         Required:
-            az: an availability zone
+            az (str): An availability zone
+            dry_run (bool): The boolean flag to simulate a dry run or not. Setting to True will only run read-only operations and not make changes to resources. (Accepted values: True | False)
 
         Optional:
-            tags: a list of key/value pair to identify asg(s) by (Default: [{'Key': 'AZ_FAILURE', 'Value': 'True'}] )
+            lb_names (List[str]): A list of LB names
+            tags (List[Dict[str, str]]): A list of key-value pairs to filter the ELB(s) by. (Default: [{'Key': 'AZ_FAILURE', 'Value': 'True'}])
+            state_path (str): Path to generate the state data (Default: fail_az.elb.json). This file is used for recover_az (rollback).
 
-    `tags` are expected as a list of dictionary objects:
-    [
-        {'Key': 'TagKey1', 'Value': 'TagValue1'},
-        {'Key': 'TagKey2', 'Value': 'TagValue2'},
-        ...
-    ]
-
-    Output Structure:
-    {
-        "AvailabilityZone": str,
-        "DryRun": bool,
-        "LoadBalancers": [
-            {
-                "LoadBalancerName": str,
-                "Type: "Classic",
-                "Before": {
-                    "SubnetIds": List[str]
-                    "AvailabilityZones": List[str]
-                },
-                "After": {
-                    "SubnetIds": List[str]
-                    "AvailabilityZones": List[str]
+    Return Structure:
+        {
+            "AvailabilityZone": str,
+            "DryRun": bool,
+            "LoadBalancers": [
+                {
+                    "LoadBalancerName": str,
+                    "Type: "Classic",
+                    "Before": {
+                        "SubnetIds": List[str]
+                        "AvailabilityZones": List[str]
+                    },
+                    "After": {
+                        "SubnetIds": List[str]
+                        "AvailabilityZones": List[str]
+                    }
                 }
-            }
-        ]
-    }
+            ]
+        }
     """
 
     if dry_run is None:
@@ -80,7 +77,7 @@ def fail_az(
 
     if not az:
         raise FailedActivity(
-            "To simulate AZ failure, you must specify " "an Availability Zone"
+            "To simulate AZ failure, you must specify an Availability Zone"
         )
 
     # Validate state_path
@@ -210,7 +207,7 @@ def recover_az(
     configuration: Configuration = None,
 ) -> bool:
     """
-    This function rolls back the ELBs that were affected by the fail_az action to its previous state. This function is dependent on the persisted data from fail_az
+    This function rolls back the ELB(s) that were affected by the fail_az action to its previous state. This function is dependent on the state data generated from fail_az.
 
     Parameters:
         Optional:
@@ -279,15 +276,7 @@ def recover_az(
 
 
 def get_lbs_by_az(client: boto3.client, az: str) -> List[str]:
-    """Get list of load balancers from an AZ
-
-    Args:
-        client (boto3.client): [description]
-        az (str): [description]
-
-    Returns:
-        List[str]: List of LB names
-    """
+    """Get list of load balancers from an AZ"""
     results = set()
 
     paginator = client.get_paginator("describe_load_balancers")
@@ -303,16 +292,7 @@ def get_lbs_by_az(client: boto3.client, az: str) -> List[str]:
 def filter_lbs_by_tags(
     client: boto3.client, lb_names: List[str], tags: List[Dict[str, str]]
 ) -> List[str]:
-    """Filter a list of LBs from a list of tags and LB names. All tags provided need to exist in the LB
-
-    Args:
-        client (boto3.client): [description]
-        lb_names (List[str]): [description]
-        tags (List[Dict[str, str]]): [description]
-
-    Returns:
-        List[str]: List of LB names
-    """
+    """Filter a list of LBs from a list of tags and LB names. All tags provided need to exist in the LB"""
     results = set()
     lb_names_chunks = [
         lb_names[i : i + 20] for i in range(0, len(lb_names), 20)
@@ -332,15 +312,7 @@ def get_lb_subnets_by_az(
 ) -> Dict[str, Any]:
     """Returns dict of LB name, list of original subnets and target subnets that are in the specified AZ
 
-    Args:
-        client (boto3.client): [description]
-        az (str): [description]
-        lb_name (str): [description].
-
-    Returns:
-        Dict[str, any]: Dict of LB name, original subnets and target subnets
-
-    return structure:
+    Return structure:
     {
         'LoadBalancerName': str,
         'OriginalSubnetIds': List[str],
@@ -385,11 +357,6 @@ def filter_lbs_in_default_vpc(
     elb_client: boto3.client, ec2_client: boto3.client, lb_names: List[str]
 ) -> List[str]:
     """Filter a list of LBs from the default VPC
-
-    Args:
-        client (boto3.client): [description]
-        lb_names (List[str]): [description]
-        tags (List[Dict[str, str]]): [description]
 
     Returns:
         List[str]: List of LB names or empty list if no default VPC in region or empty list if no lbs with default vpc found

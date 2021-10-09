@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-from typing import List, Dict, Any
-
 import boto3
+
+from logzero import logger
+from typing import List, Dict, Any
 from chaoslib.exceptions import FailedActivity
 from chaoslib.types import Configuration
-from logzero import logger
-
 from azchaosaws import client
 from azchaosaws.utils import args_fmt
 
@@ -21,40 +20,33 @@ def fail_az(
     configuration: Configuration = None,
 ) -> Dict[str, Any]:
     """
-    This function forces a reboot for Amazon MQ ActiveMQ running brokers that have active-standby setup (ACTIVE_STANDBY_MULTI_AZ).
+    This function forces a reboot for Amazon MQ (ActiveMQ) running brokers that have active-standby setup (ACTIVE_STANDBY_MULTI_AZ).
     The reboot operation is asynchronous as documented in https://docs.aws.amazon.com/amazon-mq/latest/api-reference/brokers-broker-id-reboot.html#RebootBroker
     Provide a list of broker_ids to reboot, and ensure these brokers are tagged with the key-value pair provided.
 
     Parameters:
         Required:
-            az: an availability zone. This parameter is required although it's not used for logical purposes to reboot
-            dry_run: the boolean flag to simulate a dry run or not. Setting to True will only run read only operations and not make changes to resources. (Accepted values: true | false)
+            az (str): An availability zone
+            dry_run (bool): The boolean flag to simulate a dry run or not. Setting to True will only run read-only operations and not make changes to resources. (Accepted values: True | False)
 
         Optional:
-            broker_ids: list of brokers to reboot
-            tags: a list of key/value pair to identify broker(s) by (Default: [{'AZ_FAILURE': 'True'}] )
+            broker_ids (List[str]): List of brokers to reboot
+            tags (List[Dict[str, str]]): A list of key-value pairs to filter the broker(s) by. (Default: [{'AZ_FAILURE': 'True'}])
 
-    `tags` are expected as a list of dictionary objects:
-    [
-        {'TagKey1': 'TagValue1'},
-        {'TagKey2': 'TagValue2'},
-        ...
-    ]
-
-    Output Structure:
-    {
-        "AvailabilityZone": str,
-        "DryRun": bool,
-        "Brokers":
-                {
-                    "Success": {
-                        "BrokerIds": List[str]
-                    },
-                    "Failed": {
-                        "BrokerIds": List[str]
+    Return Structure:
+        {
+            "AvailabilityZone": str,
+            "DryRun": bool,
+            "Brokers":
+                    {
+                        "Success": {
+                            "BrokerIds": List[str]
+                        },
+                        "Failed": {
+                            "BrokerIds": List[str]
+                        }
                     }
-                }
-    }
+        }
     """
 
     if dry_run is None:
@@ -65,7 +57,7 @@ def fail_az(
 
     if not az:
         raise FailedActivity(
-            "To simulate AZ failure, you must specify " "an Availability Zone"
+            "To simulate AZ failure, you must specify an Availability Zone"
         )
 
     logger.info("[MQ] Tags to scan ({})...".format(tags))
@@ -134,7 +126,8 @@ def fail_az(
 
     if not success_brokers:
         logger.warning(
-            "[MQ] No broker(s) rebooted... Ensure that the brokers you specified are tagged with the tags you provided or tagged with the default value. Alternatively, if you did not provide broker ids, ensure you have brokers tagged."
+            """[MQ] No broker(s) rebooted... Ensure that the brokers you specified are tagged with the tags you provided or tagged with the default value.
+            Alternatively, if you did not provide broker ids, ensure you have brokers tagged."""
         )
     else:
         logger.info("[MQ] Broker(s) that were rebooted: {}".format(success_brokers))
@@ -148,20 +141,17 @@ def fail_az(
 
 def get_brokers_by_tags(
     tags: List[Dict[str, str]], client: boto3.client
-) -> List[Dict[str, any]]:
+) -> List[Dict[str, Any]]:
     """Fetch list of brokers that has the specified tags
 
     Args:
         tags (List[Dict[str, str]]): tags to cross check
         client (boto3.client): MQ client
 
-    Raises:
-        FailedActivity: [description]
-
     Returns:
-        List[Dict[str, any]]: list of broker_ids that have the specified tags
+        List[Dict[str, Any]]: list of broker_ids that have the specified tags
 
-    Returns:
+    Return Structure:
         [
             {
                 'BrokerArn': str,

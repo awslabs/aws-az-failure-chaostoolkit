@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 import os
 import json
-from typing import Any, Dict, List
 
 import boto3
-from chaoslib.types import Configuration
-from logzero import logger
 
+from logzero import logger
+from typing import Any, Dict, List
+from chaoslib.types import Configuration
 from chaoslib.exceptions import FailedActivity
 from azchaosaws import client
 from azchaosaws.asg.actions import (
@@ -42,95 +42,87 @@ def fail_az(
     configuration: Configuration = None,
 ) -> Dict[str, Any]:
     """
-    This function simulates the lost of an AZ in an AWS Region.
-    It uses network ACL with deny all traffic. Please provide an AZ for an EKS cluster. All nodegroups
-    within the clusters will be affected.
-    failure_type instance does not require nodes to be tagged, only the cluster needs to be tagged and ALL NODES will be affected. All nodes under the ASG will be affected.
-
-    Instance states are determined by the EC2 instance lifecycle. The function only takes into consideration instances that are pending or running therefore
-    the Before state is reduced to those two states. Also, since only StopInstance API is used, the states in scope will be stopping/stopped. Although, you might
-    have ASGs that terminate those instances, they wont be reflected in the state file. https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-lifecycle.html
+    This function simulates the lost of an AZ in an AWS Region for EKS clusters with managed nodegroups. All nodegroups within
+    the tagged clusters will be affected.
+    For network failure type, it uses a blackhole network ACL with deny all traffic. For instance failure type, it stops normal
+    instances with force; stops persistent spot instances; cancels spot requests and terminate one-time spot instances.
+    Ensure your target clusters are tagged. ASG(s) that are part of the managed node groups
+    will also be impacted.
 
     Parameters:
         Required:
-            az: an availability zone
-            dry_run: the boolean flag to simulate a dry run or not. Setting to True will only run read only operations and not make changes to resources.
+            az (str): An availability zone
+            dry_run (bool): The boolean flag to simulate a dry run or not. Setting to True will only run read-only operations and not make changes to resources. (Accepted values: True | False)
 
         Optional:
             dry_run: the boolean flag to simulate a dry run or not. Setting to True will only run read only operations and not make changes to resources. (Accepted values: true | false)
-            failure_type: the failure type to simulate. (Accepted values: "network" | "instance") (Default: "network")
-            tags: a list of key/value pair to identify the cluster(s) by (Default: {'Key': 'AZ_FAILURE', 'Value': 'True'} )
-
-    `tags` are expected as a list of dictionary objects:
-    [
-        {'TagKey1': 'TagValue1'},
-        {'TagKey2': 'TagValue2'},
-        ...
-    ]
+            failure_type: The failure type to simulate. (Accepted values: "network" | "instance") (Default: "network")
+            tags: A list of key/value pair to identify the cluster(s) by. (Default: [{'AZ_FAILURE': 'True'}])
+            state_path (str): Path to generate the state data (Default: fail_az.eks.json). This file is used for recover_az (rollback).
 
     Output Structure:
-    {
-        "AvailabilityZone": str,
-        "DryRun": bool,
-        "Clusters": [
-            {
-                "ClusterName": str,
-                "NodeGroups": [
-                    {
-                        "NodeGroupName: str,
-                        "AutoScalingGroups":
-                            [
-                                {
-                                    "AutoScalingGroupName": str,
-                                    "Before": {
-                                        "SubnetIds": List[str],
-                                        "AZRebalance": bool,
-                                        "MinSize": int,
-                                        "MaxSize": int,
-                                        "DesiredCapacity": int
-                                    },
-                                    "After": {
-                                        "SubnetIds": List[str],
-                                        "AZRebalance": bool,
-                                        "MinSize": int,
-                                        "MaxSize": int,
-                                        "DesiredCapacity": int
-                                    }
-                                }
-                            ]
-                        "Subnets":
+        {
+            "AvailabilityZone": str,
+            "DryRun": bool,
+            "Clusters": [
+                {
+                    "ClusterName": str,
+                    "NodeGroups": [
+                        {
+                            "NodeGroupName: str,
+                            "AutoScalingGroups":
                                 [
                                     {
-                                        "SubnetId": str,
-                                        "VpcId": str
+                                        "AutoScalingGroupName": str,
                                         "Before": {
-                                            "NetworkAclId": str,
-                                            "NetworkAclAssociationId": str
+                                            "SubnetIds": List[str],
+                                            "AZRebalance": bool,
+                                            "MinSize": int,
+                                            "MaxSize": int,
+                                            "DesiredCapacity": int
                                         },
                                         "After": {
-                                            "NetworkAclId": str,
-                                            "NetworkAclAssociationId": str
+                                            "SubnetIds": List[str],
+                                            "AZRebalance": bool,
+                                            "MinSize": int,
+                                            "MaxSize": int,
+                                            "DesiredCapacity": int
                                         }
-                                    },
-                                    ....
+                                    }
                                 ]
-                        "Instances":
-                                [
-                                    {
-                                        "InstanceId": str,
-                                        "Before": {
-                                            "State": 'pending'|'running'
-                                        }
-                                        "After": {
-                                            "State": 'stopping'|'stopped'
-                                        }
-                                    },
-                                    ....
-                                ]
-                        }
-                ....
-            ]
-    }
+                            "Subnets":
+                                    [
+                                        {
+                                            "SubnetId": str,
+                                            "VpcId": str
+                                            "Before": {
+                                                "NetworkAclId": str,
+                                                "NetworkAclAssociationId": str
+                                            },
+                                            "After": {
+                                                "NetworkAclId": str,
+                                                "NetworkAclAssociationId": str
+                                            }
+                                        },
+                                        ....
+                                    ]
+                            "Instances":
+                                    [
+                                        {
+                                            "InstanceId": str,
+                                            "Before": {
+                                                "State": 'pending'|'running'
+                                            }
+                                            "After": {
+                                                "State": 'stopping'|'stopped'
+                                            }
+                                        },
+                                        ....
+                                    ]
+                            }
+                    ....
+                ]
+        }
     """
 
     if dry_run is None:
@@ -141,7 +133,7 @@ def fail_az(
 
     if not az:
         raise FailedActivity(
-            "To simulate AZ failure, you must specify " "an Availability Zone"
+            "To simulate AZ failure, you must specify an Availability Zone"
         )
 
     # Validate state_path
@@ -203,11 +195,11 @@ def fail_az(
                     # If ASG is across multiple AZs
                     # [WOP] CHANGE SUBNETS TO NON TARGET AZ OF ASG FOR EVERY ASG
                     results = remove_az_subnets(
-                        client=asg_client,
+                        asg_client=asg_client,
+                        ec2_client=ec2_client,
                         az=az,
                         asg=asg,
                         dry_run=dry_run,
-                        configuration=configuration,
                     )
 
                 # Add to state
@@ -251,13 +243,14 @@ def fail_az(
             elif failure_type == "instance":
                 # Get list of instance IDs attached to ASGs.
                 instance_ids = []
-                asg_response = get_asg_by_name(asg_names=asgs, client=asg_client)
+                asg_response = get_asg_by_name(client=asg_client, asg_names=asgs)
                 for asg in asg_response["AutoScalingGroups"]:
                     instance_ids.extend(
                         [instance["InstanceId"] for instance in asg["Instances"]]
                     )
 
-                # Filter by instance state by adding instance-state-name in filter, for only pending | running instances (except stopping, stopped, terminated and shutting-down)
+                # Filter by instance state by adding instance-state-name in filter, for only pending | running instances (except stopping, stopped, terminated and
+                # shutting-down)
                 instance_state_names = ["pending", "running"]
                 filters = []
                 filters.append(
@@ -271,14 +264,14 @@ def fail_az(
                 filters.append({"Name": "availability-zone", "Values": [az]})
 
                 # [WOP] STOP NORMAL/SPOT INSTANCES
-                # Forces the instances to stop. The instances do not have an opportunity to flush file system caches or file system metadata. If you use this option, you must perform file system check and repair procedures. This option is not recommended for Windows instances.
+                # Forces the instances to stop. The instances do not have an opportunity to flush file system caches or file system metadata. If you use this option,
+                # you must perform file system check and repair procedures. This option is not recommended for Windows instances.
                 instance_failure_response = instance_failure(
                     client=ec2_client,
                     az=az,
                     dry_run=dry_run,
                     filters=filters,
                     force=True,
-                    configuration=configuration,
                 )
 
                 # Add to state
@@ -316,12 +309,13 @@ def recover_az(
     configuration: Configuration = None,
 ) -> bool:
     """
-    This function rolls back the subnets and ASGs of clusters that were affected by the fail_az action to its previous state.
-    This function is dependent on the persisted data from fail_az
+    This function rolls back the subnet(s), EC2 instance(s), ASG(s) that were affected by the fail_az action to its previous state.
+    This function is dependent on the state data generated from fail_az. Note that instances that are in terminated state will not
+    be 'rolled' back.
 
     Parameters:
         Optional:
-            state_path: path to the persisted data from fail_az (Default: fail_az.eks.json)
+            state_path (str): Path to the state data from fail_az (Default: fail_az.eks.json)
 
     """
 
@@ -380,16 +374,16 @@ def recover_az(
                         # Resume AZRebalance process if not suspended before fail_az
                         if asg["Before"]["AZRebalance"]:
                             resume_processes(
+                                client=asg_client,
                                 asg_names=[asg["AutoScalingGroupName"]],
-                                process_names=["AZRebalance"],
-                                configuration=configuration,
+                                scaling_processes=["AZRebalance"],
                             )
 
                         # Change subnets of ASG to the subnets before fail_az
                         change_subnets(
+                            client=asg_client,
                             subnets=asg["Before"]["SubnetIds"],
                             asg_names=[asg["AutoScalingGroupName"]],
-                            configuration=configuration,
                         )
 
                     if all(
@@ -466,13 +460,11 @@ def recover_az(
                 stopping_instances_ids, ignore_instances_ids = [], []
                 for tid in target_instances_ids:
                     if not instance_state(
-                        state="stopped", instance_ids=[tid], configuration=configuration
+                        client=ec2_client, state="stopped", instance_ids=[tid]
                     ):
                         stopped_instances_ids.remove(tid)
                         if instance_state(
-                            state="stopping",
-                            instance_ids=[tid],
-                            configuration=configuration,
+                            client=ec2_client, state="stopping", instance_ids=[tid]
                         ):
                             stopping_instances_ids.append(tid)
                         else:
@@ -504,9 +496,7 @@ def recover_az(
                         )
                     )
 
-                start_instances(
-                    instance_ids=stopped_instances_ids, configuration=configuration
-                )
+                start_instances(client=ec2_client, instance_ids=stopped_instances_ids)
             else:
                 logger.info(
                     "[EKS] ({}) No instances to rollback...".format(ng["NodeGroupName"])
@@ -561,17 +551,17 @@ def get_asgs_of_nodegroups_by_az(
     """
     Return cluster with nodegroups and autoscaling groups that has the target AZ. Returns None if no asgs with target AZ found.
 
-    Structure:
-    {
-        "ClusterName": str
-        "NodeGroups": [
-            {
-                "NodeGroupName: str,
-                "AutoScalingGroups": List[str]
-            }
-        ]
-    },
-    ....
+    Return Structure:
+        {
+            "ClusterName": str
+            "NodeGroups": [
+                {
+                    "NodeGroupName: str,
+                    "AutoScalingGroups": List[str]
+                }
+                ....
+            ]
+        }
     """
     logger.info(
         "[EKS] Searching for nodegroup(s) for cluster ({}) in AZ ({}).".format(
@@ -596,7 +586,7 @@ def get_asgs_of_nodegroups_by_az(
 
                 # Check if ASG contains target AZ
                 asg_response = get_asg_by_name(
-                    asg_names=[asg["name"]], client=asg_client
+                    client=asg_client, asg_names=[asg["name"]]
                 )
                 if az in asg_response["AutoScalingGroups"][0]["AvailabilityZones"]:
                     asgs.append(asg["name"])

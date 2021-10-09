@@ -12,6 +12,8 @@ extension to the [Chaos Toolkit][chaostoolkit] to test the resiliency of your ap
 [actions]: http://chaostoolkit.org/reference/api/experiment/#action
 [chaostoolkit]: http://chaostoolkit.org
 
+You are strongly advised to only utilize this extension in environments with non-production workloads, as the actions can cause unwanted downtime to your users. Be sure to check if there are any production workloads running in the target AWS account before running Chaos Toolkit experiments with this extension.
+
 ## Install
 
 This package requires Python 3.5+
@@ -22,13 +24,14 @@ environment where [chaostoolkit][] already lives.
 ### Install via pip
 
 ```
-$ pip install -U aws-az-failure-chaostoolkit
+pip install -U aws-az-failure-chaostoolkit
 ```
 
 ## Usage
 
-To use the probes and actions from this package, add the following to your
-experiment file (replace Key1 and Value1 to the appropriate key-value pair you tagged your resources with):
+### Actions
+
+To use the actions from this package, add the following to your Chaos Toolkit experiment file (replace Key1 and Value1 with the appropriate key-value pair you tagged your resources with):
 
 This action removes subnets belonging to the target AZ in all tagged ASGs and suspends AZRebalance process if its running, or updates the min, max and desired capacity to 0 for the ASG if it's only configured for one AZ:
 ```yaml
@@ -40,6 +43,7 @@ This action removes subnets belonging to the target AZ in all tagged ASGs and su
     func: fail_az
     arguments:
       az: "ap-southeast-1a"
+      dry_run: True
       tags:
         - Key: "Key1"
           Value: "Value1"
@@ -55,6 +59,7 @@ This action with network failure will affect tagged/filtered subnets in the targ
     func: fail_az
     arguments:
       az: "ap-southeast-1a"
+      dry_run: True
       failure_type: "network"
       filters:
         - Name: tag:TagKey1
@@ -72,6 +77,7 @@ This action with instance failure will affect tagged/filtered instances in the t
     func: fail_az
     arguments:
       az: "ap-southeast-1a"
+      dry_run: True
       failure_type: "instance"
       filters:
         - Name: tag:TagKey1
@@ -89,6 +95,7 @@ This action removes subnets from target AZ in tagged application load balancers:
     func: fail_az
     arguments:
       az: "ap-southeast-1a"
+      dry_run: True
       tags:
         - Key: "Key1"
           Value: "Value1"
@@ -104,12 +111,13 @@ This action detaches classic load balancers from subnets belonging to target AZ 
     func: fail_az
     arguments:
       az: "ap-southeast-1a"
+      dry_run: True
       tags:
         - Key: "Key1"
           Value: "Value1"
 ```
 
-This action forces RDS to reboot and failver to another AZ:
+This action forces RDS to reboot and failover to another AZ:
 ```yaml
 - type: action
   name: Simulate AZ Failure for RDS
@@ -119,6 +127,7 @@ This action forces RDS to reboot and failver to another AZ:
     func: fail_az
     arguments:
       az: "ap-southeast-1a"
+      dry_run: True
       tags:
         - Key: "Key1"
           Value: "Value1"
@@ -134,6 +143,7 @@ This action forces ElastiCache (cluster mode disabled) to failover primary nodes
     func: fail_az
     arguments:
       az: "ap-southeast-1a"
+      dry_run: True
       tags:
         - Key: "Key1"
           Value: "Value1"
@@ -149,6 +159,7 @@ This action forces ElastiCache (cluster mode enabled) to failover the shards pro
     func: fail_az
     arguments:
       az: "ap-southeast-1a"
+      dry_run: True
       tags:
         - Key: "Key1"
           Value: "Value1"
@@ -169,6 +180,7 @@ This action removes subnets belonging to the target AZ in all nodegroup ASGs tha
     func: fail_az
     arguments:
       az: "ap-southeast-1a"
+      dry_run: True
       failure_type: "network"
       tags:
         - Key1: "Value1"
@@ -184,6 +196,7 @@ This action removes subnets belonging to the target AZ in all nodegroup ASGs tha
     func: fail_az
     arguments:
       az: "ap-southeast-1a"
+      dry_run: True
       failure_type: "instance"
       tags:
         - Key1: "Value1"
@@ -199,6 +212,7 @@ This action reboots the specified brokers that are tagged, or tagged brokers if 
     func: fail_az
     arguments:
       az: "ap-southeast-1a"
+      dry_run: True
       tags:
         - "Key1": "Value1"
       broker_ids: 
@@ -206,13 +220,11 @@ This action reboots the specified brokers that are tagged, or tagged brokers if 
         - BrokerId2
 ```
 
-To 'rollback' the changes made by the `fail_az` action, you can use `recover_az` in your experiment template. The `recover_az` function will read the state file generated and rollback if it's a service that's supported.
+* To 'rollback' the changes made by the `fail_az` action, you can use `recover_az` in your experiment template. The `recover_az` function will read the state file generated and rollback if it's a service that's supported.
+* Do also note that by default, the `dry_run` argument for each `fail_az` action is required. Setting it to `True` will only run read-only operations and not impact the target resources. Set it to `False` if you want the actions to make changes your resources. It is best practice to set it on an experiment level under the configuration block and then reference it for every action. 
+* To have granular filtering of resources, you can also provide a list of tags as part of the argument for the `fail_az` action.
 
-Please explore the code to see existing probes, actions and supported capabilities.
-
-Alternatively, you can run `chaos discover aws-az-failure-chaostoolkit` to view the list of supported actions and probes along with their required and optional arguments for each service in the generated `discovery.json` file.
-
-Do also note that by default, the `dry_run` argument for the functions are set to `True`. Set it to `False` if you want the actions to make changes your resources.
+Please explore the code to see existing actions and supported arguments. Alternatively, you can run `chaos discover aws-az-failure-chaostoolkit` to view the list of supported actions along with their required and optional arguments for each service in the generated `discovery.json` file.
 
 ## Configuration
 
@@ -225,13 +237,7 @@ those dependencies.
 [venv]: http://chaostoolkit.org/reference/usage/install/#create-a-virtual-environment
 
 ```console
-$ pip install -r requirements-dev.txt -r requirements.txt
-```
-
-Then, point your environment to this directory:
-
-```console
-$ pip install -e .
+$ make install-dev
 ```
 
 Now, you can edit the files and they will be automatically be seen by your
@@ -242,7 +248,7 @@ environment, even when running from the `chaos` command locally.
 To run the tests for the project execute the following:
 
 ```
-$ pytest
+$ make tests
 ```
 
 ## Security

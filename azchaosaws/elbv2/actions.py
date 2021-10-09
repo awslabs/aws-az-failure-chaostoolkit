@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 import json
 import os
-from typing import Any, Dict, List
 
 import boto3
-from botocore.exceptions import ClientError
+
 from logzero import logger
+from typing import Any, Dict, List
+from botocore.exceptions import ClientError
 from chaoslib.exceptions import FailedActivity
 from chaoslib.types import Configuration
 from azchaosaws import client
@@ -28,35 +29,30 @@ def fail_az(
 
     Parameters:
         Required:
-            az: an availability zone
+            az (str): An availability zone
+            dry_run (bool): The boolean flag to simulate a dry run or not. Setting to True will only run read-only operations and not make changes to resources. (Accepted values: True | False)
 
         Optional:
-            tags: a list of key/value pair to identify asg(s) by (Default: [{"Key": "AZ_FAILURE", "Value": "True"}])
+            tags (List[Dict[str, str]]): A list of key-value pairs to filter the ELBv2(s) by. (Default: [{'Key': 'AZ_FAILURE', 'Value': 'True'}])
+            state_path (str): Path to generate the state data (Default: fail_az.elbv2.json). This file is used for recover_az (rollback).
 
-    `tags` are expected as a list of dictionary objects:
-    [
-        {'Key': 'TagKey1', 'Value': 'TagValue1'},
-        {'Key': 'TagKey2', 'Value': 'TagValue2'},
-        ...
-    ]
-
-    Output Structure:
-    {
-        "AvailabilityZone": str,
-        "DryRun": bool,
-        "LoadBalancers": [
-            {
-                "LoadBalancerName": str,
-                "Type: str,
-                "Before": {
-                    "SubnetIds": List[str]
-                },
-                "After": {
-                    "SubnetIds": List[str]
+    Return Structure:
+        {
+            "AvailabilityZone": str,
+            "DryRun": bool,
+            "LoadBalancers": [
+                {
+                    "LoadBalancerName": str,
+                    "Type: str,
+                    "Before": {
+                        "SubnetIds": List[str]
+                    },
+                    "After": {
+                        "SubnetIds": List[str]
+                    }
                 }
-            }
-        ]
-    }
+            ]
+        }
     """
 
     if dry_run is None:
@@ -67,7 +63,7 @@ def fail_az(
 
     if not az:
         raise FailedActivity(
-            "To simulate AZ failure, you must specify " "an Availability Zone"
+            "To simulate AZ failure, you must specify an Availability Zone"
         )
 
     # Validate state_path
@@ -76,17 +72,18 @@ def fail_az(
     )
 
     elbv2_client = client("elbv2", configuration)
+    ec2_client = client("ec2", configuration)
     fail_az_state = {"LoadBalancers": []}
     lbs_state = []
 
     target_az_lb_arns = get_lbs_by_az(elbv2_client, az)
-    logger.info(target_az_lb_arns)
+
     if not target_az_lb_arns:
         logger.warning("[ELBV2] No LBs in the target AZ found...")
         raise FailedActivity("[ELBV2] No LBs in the target AZ found...")
 
     lb_arns = filter_lbs_by_tags(elbv2_client, target_az_lb_arns, tags)
-    logger.info(lb_arns)
+
     if not lb_arns:
         logger.warning(
             "[ELBV2] No LBs with the provided tags and the target AZ found..."
@@ -130,10 +127,11 @@ def fail_az(
             )
 
             set_subnets(
+                elbv2_client=elbv2_client,
+                ec2_client=ec2_client,
                 load_balancer_names=[lb_block["LoadBalancerName"]],
                 subnet_ids=subnets,
                 dry_run=dry_run,
-                configuration=configuration,
             )
 
             # Add to state
@@ -166,11 +164,11 @@ def recover_az(
     configuration: Configuration = None,
 ) -> bool:
     """
-    This function rolls back the ELBs that were affected by the fail_az action to its previous state. This function is dependent on the persisted data from fail_az
+    This function rolls back the ELBv2(s) that were affected by the fail_az action to its previous state. This function is dependent on the state data generated from fail_az.
 
     Parameters:
         Optional:
-            state_path: path to the persisted data from fail_az (Default: fail_az.elb.json)
+            state_path (str): Path to the state data from fail_az (Default: fail_az.elbv2.json)
 
     """
 
@@ -184,6 +182,9 @@ def recover_az(
     # Check if data was for dry run
     if fail_az_state["DryRun"]:
         raise FailedActivity("State file was generated from a dry run...")
+
+    elbv2_client = client("elbv2", configuration)
+    ec2_client = client("ec2", configuration)
 
     for elb in fail_az_state["LoadBalancers"]:
         logger.warning(
@@ -201,10 +202,11 @@ def recover_az(
 
             # Change subnets of ELB to subnets before fail_az
             set_subnets(
+                elbv2_client=elbv2_client,
+                ec2_client=ec2_client,
                 load_balancer_names=[elb["LoadBalancerName"]],
                 subnet_ids=elb["Before"]["SubnetIds"],
                 dry_run=False,
-                configuration=configuration,
             )
 
     # Remove state file upon completion
@@ -222,48 +224,30 @@ def recover_az(
 
 
 def set_subnets(
+    elbv2_client: boto3.client,
+    ec2_client: boto3.client,
     load_balancer_names: List[str],
     subnet_ids: List[str],
     dry_run: bool = False,
-    configuration: Configuration = None,
-) -> List[Dict[str, Any]]:
-    subnet_ids = get_subnets(subnet_ids, client("ec2", configuration))
+) -> None:
 
-    elbv2_client = client("elbv2", configuration)
-    load_balancers = get_load_balancer_arns(load_balancer_names, elbv2_client)
+    subnet_ids = get_subnets(ec2_client, subnet_ids)
+    load_balancers = get_load_balancer_arns(elbv2_client, load_balancer_names)
 
     if load_balancers.get("network", []):
-        raise FailedActivity("Cannot change subnets of network load balancers.")
+        raise FailedActivity("Cannot set subnets of network load balancers...")
 
-    results = []
     if not dry_run:
         # [WOP]
         for lb_arn in load_balancers["application"]:
-            response = elbv2_client.set_subnets(
-                LoadBalancerArn=lb_arn, Subnets=subnet_ids
-            )
-            response["LoadBalancerArn"] = lb_arn
-            results.append(response)
-
-    return results
+            elbv2_client.set_subnets(LoadBalancerArn=lb_arn, Subnets=subnet_ids)
 
 
 def get_load_balancer_arns(
-    load_balancer_names: List[str], client: boto3.client
+    client: boto3.client, load_balancer_names: List[str]
 ) -> Dict[str, List[str]]:
-    """
-    Returns load balancer arns categorized by the type of load balancer
-
-    return structure:
-    {
-        'network': ['load balancer arn'],
-        'application': ['load balancer arn']
-    }
-    """
     results = {}
-    logger.debug(
-        "[ELBV2] Searching for load balancer name(s): {}.".format(load_balancer_names)
-    )
+    logger.debug("[ELBV2] Finding for load balancer: {}.".format(load_balancer_names))
 
     try:
         response = client.describe_load_balancers(Names=load_balancer_names)
@@ -281,33 +265,29 @@ def get_load_balancer_arns(
     except ClientError as e:
         raise FailedActivity(e.response["Error"]["Message"])
 
-    missing_lbs = [lb for lb in load_balancer_names if lb not in results["Names"]]
-    if missing_lbs:
-        raise FailedActivity(
-            "Unable to locate load balancer(s): {}".format(missing_lbs)
-        )
+    invalid_lbs = [lb for lb in load_balancer_names if lb not in results["Names"]]
+    if invalid_lbs:
+        raise FailedActivity("Unable to find load balancer(s): {}".format(invalid_lbs))
 
     if not results:
         raise FailedActivity(
-            "Unable to find any load balancer(s) matching name(s): {}".format(
-                load_balancer_names
-            )
+            "Unable to find any load balancer(s): {}".format(load_balancer_names)
         )
 
     return results
 
 
-def get_subnets(subnet_ids: List[str], client: boto3.client) -> List[str]:
+def get_subnets(client: boto3.client, subnet_ids: List[str]) -> List[str]:
     try:
         response = client.describe_subnets(SubnetIds=subnet_ids)["Subnets"]
-        results = [r["SubnetId"] for r in response]
+        subnet_ids_response = [r["SubnetId"] for r in response]
     except ClientError as e:
         raise FailedActivity(e.response["Error"]["Message"])
 
-    missing_subnets = [s for s in subnet_ids if s not in results]
-    if missing_subnets:
-        raise FailedActivity("Invalid subnet id(s): {}".format(missing_subnets))
-    return results
+    invalid_subnets = [s for s in subnet_ids if s not in subnet_ids_response]
+    if invalid_subnets:
+        raise FailedActivity("Invalid subnet id(s): {}".format(invalid_subnets))
+    return subnet_ids_response
 
 
 def get_lbs_by_az(client: boto3.client, az: str) -> List[str]:
@@ -370,7 +350,7 @@ def get_lb_subnets_by_az(
         load_balancer_arn (str): arn of lb. Defaults to None.
 
     Returns:
-        Dict[str, any]: Dict of LB name, original subnets and target subnets
+        Dict[str, Any]: Dict of LB name, original subnets and target subnets
     """
     results = {}
     params = {}
@@ -383,6 +363,10 @@ def get_lb_subnets_by_az(
             for availability_zone in lb["AvailabilityZones"]:
                 original_subnet_ids.append(availability_zone["SubnetId"])
                 if availability_zone["ZoneName"] == az:
+                    if len(lb["AvailabilityZones"]) < 3:
+                        raise FailedActivity(
+                            "[ELBV2] LB requires at least 2 AZs to operate. Please ensure your LB has 3 AZs to support the removal of 1 AZ."
+                        )
                     target_az_subnet_ids.append(availability_zone["SubnetId"])
 
             results["LoadBalancerName"] = lb["LoadBalancerName"]

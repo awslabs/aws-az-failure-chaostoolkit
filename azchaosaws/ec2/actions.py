@@ -2,18 +2,19 @@
 import time
 import json
 import os
+
+import boto3
+
+from logzero import logger
 from collections import defaultdict
 from copy import deepcopy
 from typing import Any, Dict, List
-
-import boto3
 from botocore.exceptions import ClientError
 from azchaosaws import client
 from chaoslib.exceptions import FailedActivity
 from chaoslib.types import Configuration
 from azchaosaws.utils import args_fmt
 from azchaosaws.helpers import validate_fail_az_path
-from logzero import logger
 
 __all__ = ["fail_az", "recover_az"]
 
@@ -28,63 +29,58 @@ def fail_az(
     configuration: Configuration = None,
 ) -> Dict[str, Any]:
     """
-    This function simulates the lost of an AZ in an AWS Region.
-    It uses network ACL with deny all traffic. Please provide an AZ or a set of filters with an AZ.
-    Ensure your subnets are tagged if failure_type = "network"
-    Ensure your instances are tagged if failure_type = "instance"
-    Note that instances that are not in pending or running state will still be captured and stopped.
-
-    Instance states are determined by the EC2 instance lifecycle. The function only takes into consideration instances that are pending or running therefore
-    the Before state is reduced to those two states. Also, since only StopInstance API is used, the states in scope will be stopping/stopped. Although, you might
-    have ASGs that terminate those instances, they wont be reflected in the state file. https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-lifecycle.html
+    This function simulates the lost of an AZ in an AWS Region for EC2.
+    For network failure type, it uses a blackhole network ACL with deny all traffic. For instance failure type, it stops normal
+    instances with force; stops persistent spot instances; cancels spot requests and terminate one-time spot instances.
+    Ensure your subnets are tagged if failure_type = "network" and ensure your instances are tagged if failure_type = "instance".
+    Instances that are not in pending or running state will still be captured and stopped.
 
     Parameters:
         Required:
-        dry_run: the boolean flag to simulate a dry run or not. Setting to True will only run read only operations and not make changes to resources. (Accepted values: true | false)
+            dry_run (bool): The boolean flag to simulate a dry run or not. Setting to True will only run read-only operations and not make changes to resources. (Accepted values: True | False)
 
         At least one of:
-            az: an availability zone
-            filters: a list of key/value pair to identify subnets by. To provide availability-zone filter if az not specified.
+            az (str): An availability zone
+            filters (List[Dict[str, Any]]): A list of key/value pair to identify subnets by. To provide availability-zone filter if az not specified.
 
         Optional:
-            failure_type: the failure type to simulate. (Accepted values: "network" | "instance") (Default: "network")
-            state_path: Path to the output file (format: JSON) that will be generated from fail_az. This file is used for recover_az (rollback). You may provide the path to the filename and it must not exists. Conflicts with state_path from EKS, ASG and ELB, make sure they have diff file names. If none provided,
-            (defaults to fail_az.ec2.json). If file name provided without .json extension, .ec2.json will be appended to it.
+            failure_type (str): The failure type to simulate. (Accepted values: "network" | "instance") (Default: "network")
+            state_path (str): Path to generate the state data (Default: fail_az.ec2.json). This file is used for recover_az (rollback).
 
     Output Structure:
-    {
-        "AvailabilityZone": str,
-        "DryRun": bool,
-        "Subnets":
-                [
-                    {
-                        "SubnetId": str,
-                        "VpcId": str
-                        "Before": {
-                            "NetworkAclId": str,
-                            "NetworkAclAssociationId": str
+        {
+            "AvailabilityZone": str,
+            "DryRun": bool,
+            "Subnets":
+                    [
+                        {
+                            "SubnetId": str,
+                            "VpcId": str
+                            "Before": {
+                                "NetworkAclId": str,
+                                "NetworkAclAssociationId": str
+                            },
+                            "After": {
+                                "NetworkAclId": str,
+                                "NetworkAclAssociationId": str
+                            }
                         },
-                        "After": {
-                            "NetworkAclId": str,
-                            "NetworkAclAssociationId": str
-                        }
-                    },
-                    ....
-                ],
-        "Instances":
-                [
-                    {
-                        "InstanceId": str,
-                        "Before": {
-                            "State": 'pending'|'running'
-                        }
-                        "After": {
-                            "State": 'stopping'|'stopped'
-                        }
-                    },
-                    ....
-                ]
-    }
+                        ....
+                    ],
+            "Instances":
+                    [
+                        {
+                            "InstanceId": str,
+                            "Before": {
+                                "State": 'pending'|'running'
+                            }
+                            "After": {
+                                "State": 'stopping'|'stopped'
+                            }
+                        },
+                        ....
+                    ]
+        }
     """
 
     if dry_run is None:
@@ -189,14 +185,10 @@ def fail_az(
                 )
 
         # [WOP] Stop normal/spot intances
-        # If Force is to be set to True, it forces the instances to stop. The instances do not have an opportunity to flush file system caches or file system metadata. If you use this option, you must perform file system check and repair procedures. This option is not recommended for Windows instances.
+        # If Force is to be set to True, it forces the instances to stop. The instances do not have an opportunity to flush file system caches or file system metadata.
+        # If you use this option, you must perform file system check and repair procedures. This option is not recommended for Windows instances.
         instance_failure_response = instance_failure(
-            client=client,
-            az=az,
-            dry_run=dry_run,
-            filters=filters,
-            force=True,
-            configuration=configuration,
+            client=ec2_client, az=az, dry_run=dry_run, filters=filters, force=True
         )
 
         # Add to state
@@ -218,14 +210,13 @@ def recover_az(
     configuration: Configuration = None,
 ) -> bool:
     """
-    This function rolls back the NACLs that were affected by the fail_az action to its previous state. This function is dependent on the persisted data from fail_az
-    Only if subnets or instances have an after
-    This function also rolls back instances that were stopped. Instances that were in Pending or Running state before, will be started.
-    Note: if you don't intend to rollback, make sure no file is present. There is no dry_run mode.
+    This function rolls back the subnet(s) and/or EC2 instances that were affected by the fail_az action to its previous state.
+    This function is dependent on the state data generated from fail_az. Note that instances that are in terminated state will not
+    be 'rolled' back.
 
     Parameters:
         Optional:
-            state_path: path to the persisted data from fail_az (Default: fail_az.ec2.json)
+            state_path (str): Path to the state data from fail_az (Default: fail_az.ec2.json)
 
     """
 
@@ -298,11 +289,11 @@ def recover_az(
         stopping_instances_ids, ignore_instances_ids = [], []
         for tid in target_instances_ids:
             if not instance_state(
-                state="stopped", instance_ids=[tid], configuration=configuration
+                client=ec2_client, state="stopped", instance_ids=[tid]
             ):
                 stopped_instances_ids.remove(tid)
                 if instance_state(
-                    state="stopping", instance_ids=[tid], configuration=configuration
+                    client=ec2_client, state="stopping", instance_ids=[tid]
                 ):
                     stopping_instances_ids.append(tid)
                 else:
@@ -334,7 +325,7 @@ def recover_az(
                 )
             )
 
-        start_instances(instance_ids=stopped_instances_ids, configuration=configuration)
+        start_instances(client=ec2_client, instance_ids=stopped_instances_ids)
     else:
         logger.info("[EC2] No instances to rollback...")
 
@@ -353,12 +344,12 @@ def recover_az(
 
 
 def stop_instances(
+    client: boto3.client,
     instance_ids: List[str] = None,
     az: str = None,
     dry_run: bool = False,
     filters: List[Dict[str, Any]] = None,
     force: bool = False,
-    configuration: Configuration = None,
 ) -> List[Dict[str, Any]]:
     if not az and not instance_ids and not filters:
         raise FailedActivity(
@@ -372,49 +363,47 @@ def stop_instances(
             "stop all instances in AZ %s!" % az
         )
 
-    ec2_client = client("ec2", configuration)
-
     if not instance_ids:
         filters = deepcopy(filters) if filters else []
 
         if az:
             filters.append({"Name": "availability-zone", "Values": [az]})
-        instance_types = list_instances_by_type(filters, ec2_client)
+        instance_lifecycles = list_instances_by_lifecycle(client, filters)
 
-        if not instance_types:
+        if not instance_lifecycles:
             logger.warning("[EC2] No instances in availability zone: {}".format(az))
             raise FailedActivity("No instances in availability zone: {}".format(az))
     else:
-        instance_types = get_instance_type_by_id(instance_ids, ec2_client)
+        instance_lifecycles = get_instance_lifecycle_by_ids(client, instance_ids)
 
     logger.debug(
         "[EC2] Picked EC2 instances ({}) from AZ ({}) to be stopped".format(
-            str(instance_types), az
+            str(instance_lifecycles), az
         )
     )
 
-    for instance_type in instance_types.keys():
-        instance_ids = [id for id in instance_types[instance_type]]
+    for instance_lifecycle in instance_lifecycles.keys():
+        instance_ids = [id for id in instance_lifecycles[instance_lifecycle]]
         logger.warning(
             "[EC2] Based on config provided, AZ failure simulation will happen in ({}) for these ({}) instances ({}) count({})".format(
-                az, instance_type, instance_ids, len(instance_ids)
+                az, instance_lifecycle, instance_ids, len(instance_ids)
             )
         )
 
     return (
-        stop_instances_any_type(
-            instance_types=instance_types, force=force, client=ec2_client
+        stop_instances_any_lifecycle(
+            client=client, instance_lifecycles=instance_lifecycles, force=force
         )
         if not dry_run
-        else instance_types
+        else instance_lifecycles
     )
 
 
 def start_instances(
+    client: boto3.client,
     instance_ids: List[str] = None,
     az: str = None,
     filters: List[Dict[str, Any]] = None,
-    configuration: Configuration = None,
 ) -> List[Dict[str, Any]]:
     if not any([instance_ids, az, filters]):
         raise FailedActivity(
@@ -429,8 +418,6 @@ def start_instances(
             "start all instances in AZ %s!" % az
         )
 
-    ec2_client = client("ec2", configuration)
-
     if not instance_ids:
         filters = deepcopy(filters) or []
 
@@ -439,7 +426,7 @@ def start_instances(
             logger.debug("[EC2] Looking for instances in AZ: %s" % az)
 
         # Select instances based on filters
-        instance_types = list_instances_by_type(filters, ec2_client)
+        instance_types = list_instances_by_lifecycle(client, filters)
 
         if not instance_types:
             raise FailedActivity(
@@ -450,75 +437,71 @@ def start_instances(
             "[EC2] Instances in AZ %s selected: %s}." % (az, str(instance_types))
         )
     else:
-        instance_types = get_instance_type_by_id(instance_ids, ec2_client)
-    return start_instances_any_type(instance_types, ec2_client)
+        instance_types = get_instance_lifecycle_by_ids(client, instance_ids)
+    return start_instances_any_lifecycle(client, instance_types)
 
 
-def list_instances_by_type(
-    filters: List[Dict[str, Any]], client: boto3.client
+def list_instances_by_lifecycle(
+    client: boto3.client, filters: List[Dict[str, Any]]
 ) -> Dict[str, Any]:
-    """
-    Return all instance ids matching the given filters by type
-    (InstanceLifecycle) ie spot, on demand, etc.
-    """
-    logger.debug("[EC2] EC2 instances query: ({})".format(str(filters)))
-    res = client.describe_instances(Filters=filters)
-    logger.debug("[EC2] Instances matching the filter query: ({})".format(str(res)))
+    logger.debug("[EC2] EC2 instances filter: ({})".format(str(filters)))
+    response = client.describe_instances(Filters=filters)
+    logger.debug("[EC2] Filtered instances: ({})".format(str(response)))
 
-    return get_instance_type_from_response(res)
-
-
-def get_instance_type_from_response(response: Dict) -> Dict:
-    instances_type = defaultdict(List)
+    instances_lifecycle = defaultdict(List)
     for reservation in response["Reservations"]:
-        for inst in reservation["Instances"]:
-            lifecycle = inst.get("InstanceLifecycle", "normal")
+        for instance in reservation["Instances"]:
+            lifecycle = instance.get("InstanceLifecycle", "normal")
+            if lifecycle not in instances_lifecycle.keys():
+                instances_lifecycle[lifecycle] = []
+            instances_lifecycle[lifecycle].append(instance["InstanceId"])
 
-            if lifecycle not in instances_type.keys():
-                instances_type[lifecycle] = []
-
-            instances_type[lifecycle].append(inst["InstanceId"])
-
-    return instances_type
+    return instances_lifecycle
 
 
-def get_spot_request_ids_from_response(response: Dict) -> List[str]:
-    spot_request_ids = []
-
-    for reservation in response["Reservations"]:
-        for inst in reservation["Instances"]:
-            lifecycle = inst.get("InstanceLifecycle", "normal")
-
-            if lifecycle == "spot":
-                spot_request_ids.append(inst["SpotInstanceRequestId"])
-
-    return spot_request_ids
-
-
-def get_instance_type_by_id(instance_ids: List[str], client: boto3.client) -> Dict:
+def get_instance_lifecycle_by_ids(
+    client: boto3.client, instance_ids: List[str]
+) -> Dict:
     res = client.describe_instances(InstanceIds=instance_ids)
 
-    return get_instance_type_from_response(res)
+    instances_lifecycle = defaultdict(List)
+    for reservation in res["Reservations"]:
+        for instance in reservation["Instances"]:
+            lifecycle = instance.get("InstanceLifecycle", "normal")
+            if lifecycle not in instances_lifecycle.keys():
+                instances_lifecycle[lifecycle] = []
+            instances_lifecycle[lifecycle].append(instance["InstanceId"])
+
+    return instances_lifecycle
 
 
-def stop_instances_any_type(
-    instance_types: dict = None, force: bool = False, client: boto3.client = None
+def stop_instances_any_lifecycle(
+    client: boto3.client, instance_lifecycles: dict = None, force: bool = False
 ) -> List[Dict[str, Any]]:
 
-    response = []
-    if "normal" in instance_types:
+    results = []
+    if "normal" in instance_lifecycles:
         logger.warning(
-            "[EC2] Stopping normal instances: {}".format(instance_types["normal"])
+            "[EC2] Stopping normal instances: {}".format(instance_lifecycles["normal"])
         )
 
-        response.append(
-            client.stop_instances(InstanceIds=instance_types["normal"], Force=force)
+        results.append(
+            client.stop_instances(
+                InstanceIds=instance_lifecycles["normal"], Force=force
+            )
         )
 
-    if "spot" in instance_types:
-        spot_request_ids = get_spot_request_ids_from_response(
-            client.describe_instances(InstanceIds=instance_types["spot"])
-        )
+    if "spot" in instance_lifecycles:
+        spot_request_ids = []
+
+        response = client.describe_instances(InstanceIds=instance_lifecycles["spot"])
+
+        for reservation in response["Reservations"]:
+            for inst in reservation["Instances"]:
+                lifecycle = inst.get("InstanceLifecycle", "normal")
+
+                if lifecycle == "spot":
+                    spot_request_ids.append(inst["SpotInstanceRequestId"])
 
         logger.info("[EC2] Spot request IDs: {}".format(spot_request_ids))
 
@@ -547,7 +530,7 @@ def stop_instances_any_type(
                     persistent_spot_instance_ids
                 )
             )
-            response.append(
+            results.append(
                 client.stop_instances(
                     InstanceIds=persistent_spot_instance_ids, Force=force
                 )
@@ -569,20 +552,20 @@ def stop_instances_any_type(
                     one_time_spot_instance_ids
                 )
             )
-            response.append(
+            results.append(
                 client.terminate_instances(InstanceIds=one_time_spot_instance_ids)
             )
 
-    if "scheduled" in instance_types:
-        raise FailedActivity("[EC2] Scheduled instances support is not implemented")
-    return response
+    if "scheduled" in instance_lifecycles:
+        raise FailedActivity("[EC2] Scheduled instances not supported...")
+    return results
 
 
-def start_instances_any_type(
-    instance_types: dict, client: boto3.client
+def start_instances_any_lifecycle(
+    client: boto3.client, instance_lifecycles: dict
 ) -> List[Dict[str, Any]]:
     results = []
-    for k, v in instance_types.items():
+    for k, v in instance_lifecycles.items():
         logger.debug("[EC2] Starting %s instance(s): %s" % (k, v))
         response = client.start_instances(InstanceIds=v)
         results.extend(response.get("StartingInstances", []))
@@ -727,26 +710,26 @@ def network_failure(
     vpc_ids: List[str],
     subnet_ids: List[str],
     dry_run: bool = False,
-) -> List[Dict[str, any]]:
+) -> List[Dict[str, Any]]:
     """This function simulates network failure by creating blackhole ACLs and associating them for every subnet
 
 
     Return Structure:
-    [
-        {
-            "SubnetId": str,
-            "VpcId": str
-            "Before": {
-                "NetworkAclId": str,
-                "NetworkAclAssociationId": str
+        [
+            {
+                "SubnetId": str,
+                "VpcId": str
+                "Before": {
+                    "NetworkAclId": str,
+                    "NetworkAclAssociationId": str
+                },
+                "After": {
+                    "NetworkAclId": str,
+                    "NetworkAclAssociationId": str
+                }
             },
-            "After": {
-                "NetworkAclId": str,
-                "NetworkAclAssociationId": str
-            }
-        },
-        ....
-    ]
+            ....
+        ]
     """
     results = []
 
@@ -858,24 +841,9 @@ def network_failure(
     return results
 
 
-def instance_state(
-    state: str,
-    instance_ids: List[str] = None,
-    filters: List[Dict[str, Any]] = None,
-    configuration: Configuration = None,
-) -> bool:
-    ec2_client = client("ec2", configuration)
+def instance_state(client: boto3.client, state: str, instance_ids: List[str]) -> bool:
 
-    if not any([instance_ids, filters]):
-        raise FailedActivity(
-            '"instance_state" missing required ' 'parameter "instance_ids" or "filters"'
-        )
-
-    if instance_ids:
-        instances = ec2_client.describe_instances(InstanceIds=instance_ids)
-    else:
-        instances = ec2_client.describe_instances(Filters=filters)
-
+    instances = client.describe_instances(InstanceIds=instance_ids)
     logger.debug("[EC2] instances ({})".format(str(instances)))
 
     if len(instances["Reservations"]) > 0:
@@ -894,8 +862,7 @@ def instance_failure(
     dry_run: bool = False,
     filters: List[Dict[str, Any]] = None,
     force: bool = False,
-    configuration: Configuration = None,
-) -> List[Dict[str, any]]:
+) -> List[Dict[str, Any]]:
     """This function simulates instance failure by stopping normal/spot instances
 
     Return Structure:
@@ -917,11 +884,7 @@ def instance_failure(
     dry_run_keys = {"normal", "spot"}
 
     stop_instances_response = stop_instances(
-        az=az,
-        dry_run=dry_run,
-        filters=filters,
-        force=force,
-        configuration=configuration,
+        client=client, az=az, dry_run=dry_run, filters=filters, force=force
     )
 
     for instance_response in stop_instances_response:

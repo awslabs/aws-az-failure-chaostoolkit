@@ -1,12 +1,10 @@
 # -*- coding: utf-8 -*-
+from logzero import logger
 from typing import Any, Dict, List
-
 from chaoslib.exceptions import FailedActivity
 from chaoslib.types import Configuration
-
 from azchaosaws import client
 from azchaosaws.utils import args_fmt
-from logzero import logger
 
 __all__ = ["fail_az"]
 
@@ -19,40 +17,31 @@ def fail_az(
     configuration: Configuration = None,
 ) -> Dict[str, Any]:
     """
-    Reboots and forces a failover of your RDS instance to another AZ. Only RDS instances with the corresponding tags and is in the target AZ,
+    Reboots and forces a failover of your RDS instances to another AZ. Only RDS instances with the corresponding tags and is in the target AZ
     with Multi-AZ enabled will be impacted.
 
     Parameters:
         Required:
-            az: an availability zone
-            dry_run: the boolean flag to simulate a dry run or not. Setting to True will only run read only operations and not make changes to resources. (Accepted values: true | false)
+            az (str): An availability zone
+            dry_run (bool): The boolean flag to simulate a dry run or not. Setting to True will only run read-only operations and not make changes to resources. (Accepted values: True | False)
 
         Optional:
-            tags: a list of key/value pair to identify rds(s) by (Default: [{'Key': 'AZ_FAILURE', 'Value': 'True'}])
+            tags (List[Dict[str, str]]): A list of key-value pairs to filter the RDS instance(s) by. (Default: [{'Key': 'AZ_FAILURE', 'Value': 'True'}])
 
-    `tags` are expected as a list of dict:
-    [
-        {'Key': 'TagKey1', 'Value': 'TagValue1'},
-        {'Key': 'TagKey2', 'Value': 'TagValue2'},
-        ...
-    ]
-
-    Note: This function is stateless as compared to EC2, ASG, EKS. It does not produce state files for rollback.
-
-    Output Structure:
-    {
-        "AvailabilityZone": str,
-        "DryRun": bool,
-        "DBInstances":
-                {
-                    "Success": {
-                        "DBInstanceIdentifiers": List[str]
-                    },
-                    "Failed": {
-                        "DBInstanceIdentifiers": List[str]
+    Return Structure:
+        {
+            "AvailabilityZone": str,
+            "DryRun": bool,
+            "DBInstances":
+                    {
+                        "Success": {
+                            "DBInstanceIdentifiers": List[str]
+                        },
+                        "Failed": {
+                            "DBInstanceIdentifiers": List[str]
+                        }
                     }
-                }
-    }
+        }
     """
 
     if dry_run is None:
