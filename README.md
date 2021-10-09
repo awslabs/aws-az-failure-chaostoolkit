@@ -248,7 +248,7 @@ environment, even when running from the `chaos` command locally.
 To run the tests for the project execute the following:
 
 ```
-$ make tests
+$ make test
 ```
 
 ## Security
