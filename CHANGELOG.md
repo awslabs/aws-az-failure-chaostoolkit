@@ -2,9 +2,16 @@
 
 ## [Unreleased]
 
+## [0.1.2][] - 2021-10-10
+[0.1.2]: https://github.com/awslabs/aws-az-failure-chaostoolkit/tree/v0.1.2
+
 ### Added
 - Black and flake8
-
+- Unit test for ec2 fail_az action
+  
+### Changed
+- Minor enhancements to existing actions
+  
 ## [0.1.1][] - 2021-09-24
 [0.1.1]: https://github.com/awslabs/aws-az-failure-chaostoolkit/tree/v0.1.1
 
