@@ -12,7 +12,7 @@ extension to the [Chaos Toolkit][chaostoolkit] to test the resiliency of your ap
 [actions]: http://chaostoolkit.org/reference/api/experiment/#action
 [chaostoolkit]: http://chaostoolkit.org
 
-You are strongly advised to only utilize this extension in environments with non-production workloads, as the actions can cause unwanted downtime to your users. Be sure to check if there are any production workloads running in the target AWS account before running Chaos Toolkit experiments with this extension.
+**You are strongly advised to only utilize this extension in environments with non-production workloads, as the actions may cause unwanted downtime to your users. Be sure to check if there are any production workloads running in the target AWS account before running Chaos Toolkit experiments with this extension.**
 
 ## Install
 
