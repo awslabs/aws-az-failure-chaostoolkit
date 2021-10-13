@@ -31,7 +31,7 @@ pip install -U aws-az-failure-chaostoolkit
 
 ## Usage
 
-To use the actions from this package, add the blocks of code below to your Chaos Toolkit experiment file. Replace `Key1` and `Value1` with the appropriate key-value pair you tagged your resources with. Replace the `az` argument with the target availability zone of your choice.
+To use the actions from this package, add the blocks of code below to your Chaos Toolkit experiment file. Replace `TagKey1` and `TagValue1` with the appropriate key-value pair you tagged your resources with. Replace the value of `az` argument with an availability zone of your choice.
 
 ### Failure Actions
 
@@ -49,8 +49,8 @@ This action removes subnets belonging to the target AZ in all tagged ASGs and su
       az: "ap-southeast-1a"
       dry_run: True
       tags:
-        - Key: "Key1"
-          Value: "Value1"
+        - Key: "TagKey1"
+          Value: "TagValue1"
 ```
 
 #### Elastic Compute Cloud (EC2)
@@ -105,8 +105,8 @@ This action removes subnets from target AZ in tagged application load balancers:
       az: "ap-southeast-1a"
       dry_run: True
       tags:
-        - Key: "Key1"
-          Value: "Value1"
+        - Key: "TagKey1"
+          Value: "TagValue1"
 ```
 
 #### Classic Load Balancer (CLB)
@@ -123,8 +123,8 @@ This action detaches classic load balancers from subnets belonging to target AZ 
       az: "ap-southeast-1a"
       dry_run: True
       tags:
-        - Key: "Key1"
-          Value: "Value1"
+        - Key: "TagKey1"
+          Value: "TagValue1"
 ```
 
 #### Relational Database Service (RDS)
@@ -141,8 +141,8 @@ This action forces RDS to reboot and failover to another AZ:
       az: "ap-southeast-1a"
       dry_run: True
       tags:
-        - Key: "Key1"
-          Value: "Value1"
+        - Key: "TagKey1"
+          Value: "TagValue1"
 ```
 
 #### ElastiCache
@@ -159,8 +159,8 @@ This action forces ElastiCache (cluster mode disabled) to failover primary nodes
       az: "ap-southeast-1a"
       dry_run: True
       tags:
-        - Key: "Key1"
-          Value: "Value1"
+        - Key: "TagKey1"
+          Value: "TagValue1"
 ```
 
 This action forces ElastiCache (cluster mode enabled) to failover the shards provided as cache cluster ids (sequential if multiple shards of same cluster) (replace ReplicationGroup1, CacheClusterId1 and CacheClusterId2 if needed):
@@ -175,8 +175,8 @@ This action forces ElastiCache (cluster mode enabled) to failover the shards pro
       az: "ap-southeast-1a"
       dry_run: True
       tags:
-        - Key: "Key1"
-          Value: "Value1"
+        - Key: "TagKey1"
+          Value: "TagValue1"
       replication_groups:
         - replication_group_id: ReplicationGroup1
           cache_cluster_ids:
@@ -199,7 +199,7 @@ This action removes subnets belonging to the target AZ in all nodegroup ASGs tha
       dry_run: True
       failure_type: "network"
       tags:
-        - Key1: "Value1"
+        - TagKey1: "TagValue1"
 ```
 
 This action removes subnets belonging to the target AZ in all nodegroup ASGs that are part of the tagged EKS clusters and suspends AZRebalance process if its running. Instance failure will affect instances part of the node groups that are in the target AZ that are in pending/running state by stopping normal/spot instances:
@@ -215,7 +215,7 @@ This action removes subnets belonging to the target AZ in all nodegroup ASGs tha
       dry_run: True
       failure_type: "instance"
       tags:
-        - Key1: "Value1"
+        - TagKey1: "TagValue1"
 ```
 
 #### Managed Message Broker Service (MQ)
@@ -232,7 +232,7 @@ This action reboots the specified brokers that are tagged, or tagged brokers if 
       az: "ap-southeast-1a"
       dry_run: True
       tags:
-        - "Key1": "Value1"
+        - "TagKey1": "TagValue1"
       broker_ids: 
         - BrokerId1
         - BrokerId2
