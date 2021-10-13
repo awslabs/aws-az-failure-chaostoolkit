@@ -105,3 +105,6 @@ junit-test-results.xml
 
 .vscode
 ci.bash
+
+# sonarqube
+.scannerwork
