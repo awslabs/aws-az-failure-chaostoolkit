@@ -12,11 +12,11 @@ fmt:
 	black .
 
 .PHONY: lint
-lint: fmt
+lint:
 	flake8 azchaosaws/ tests/ --count --statistics
 
 .PHONY: test
-test: fmt
+test:
 	python setup.py test
 
 .PHONY: build

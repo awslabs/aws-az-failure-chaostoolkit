@@ -1,4 +1,4 @@
-name: tests
+name: lint
 
 on:
   push:
@@ -9,24 +9,22 @@ on:
       - "main"
 
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [3.6, 3.7, 3.8, 3.9]
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python 3.7
         uses: actions/setup-python@v2
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: 3.7
       - name: Check Python version
         run: python --version
       - name: Install
         run: |
           python -m pip install --upgrade pip
           make install-dev
-      - name: Test
-        run: make test
+      - name: Format
+        run: make fmt
+      - name: Lint
+        run: make lint
