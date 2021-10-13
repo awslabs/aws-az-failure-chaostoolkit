@@ -228,7 +228,6 @@ This action reboots the specified brokers that are tagged, or tagged brokers if 
 
 Please explore the code to see existing actions and supported arguments. Alternatively, you can run `chaos discover aws-az-failure-chaostoolkit` to view the list of supported actions along with their required and optional arguments for each service in the generated `discovery.json` file.
 
-### Sample Experiment Template
 
 ## Configuration
 
