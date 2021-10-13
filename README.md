@@ -13,8 +13,8 @@
 This project is a collection of [actions][], gathered as an
 extension to the [Chaos Toolkit][chaostoolkit] to simulate an Availability Zone (AZ) failure across multiple AWS services for you to test the resiliency of your hosted applications.
 
-[actions]: http://chaostoolkit.org/reference/api/experiment/#action
-[chaostoolkit]: http://chaostoolkit.org
+[actions]: https://chaostoolkit.org/reference/api/experiment/#action
+[chaostoolkit]: https://chaostoolkit.org
 
 ## Install
 
