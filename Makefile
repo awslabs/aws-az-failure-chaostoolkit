@@ -13,7 +13,7 @@ fmt:
 
 .PHONY: lint
 lint: fmt
-	flake8 azchaosaws/ tests/
+	flake8 azchaosaws/ tests/ --count --statistics
 
 .PHONY: test
 test: fmt
