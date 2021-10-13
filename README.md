@@ -1,7 +1,9 @@
 # Chaos Toolkit AZ Failure Extension for AWS
 
-[![Python versions](https://img.shields.io/badge/python-3.5+-blue.svg)](https://www.python.org/downloads/release/python-360/)
+[![Python versions](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/release/python-360/)
 [![PyPi version](https://img.shields.io/pypi/v/aws-az-failure-chaostoolkit.svg)](https://pypi.org/project/aws-az-failure-chaostoolkit/#history)
+![Tests](https://github.com/awslabs/aws-az-failure-chaostoolkit/workflows/tests/badge.svg?branch=main)
+![Lint](https://github.com/awslabs/aws-az-failure-chaostoolkit/workflows/lint/badge.svg?branch=main)
 [![Downloads](https://pepy.tech/badge/aws-az-failure-chaostoolkit)](https://pepy.tech/project/aws-az-failure-chaostoolkit)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
@@ -9,14 +11,14 @@
 > Note: You are strongly advised to only utilize this extension in environments with non-production workloads, as the actions may cause unwanted downtime to your users. Be sure to check if there are any production workloads running in the target AWS account before running Chaos Toolkit experiments with this extension.
 
 This project is a collection of [actions][], gathered as an
-extension to the [Chaos Toolkit][chaostoolkit] to test the resiliency of your applications hosted on AWS.
+extension to the [Chaos Toolkit][chaostoolkit] to simulate an Availability Zone (AZ) failure across multiple AWS services for you to test the resiliency of your hosted applications.
 
 [actions]: http://chaostoolkit.org/reference/api/experiment/#action
 [chaostoolkit]: http://chaostoolkit.org
 
 ## Install
 
-This package requires Python 3.5+
+This package requires Python 3.6 or newer.
 
 To be used from your experiment, this package must be installed in the Python
 environment where [chaostoolkit][] already lives.
@@ -226,6 +228,8 @@ This action reboots the specified brokers that are tagged, or tagged brokers if 
 
 Please explore the code to see existing actions and supported arguments. Alternatively, you can run `chaos discover aws-az-failure-chaostoolkit` to view the list of supported actions along with their required and optional arguments for each service in the generated `discovery.json` file.
 
+### Sample Experiment Template
+
 ## Configuration
 
 ### Develop
@@ -243,11 +247,27 @@ $ make install-dev
 Now, you can edit the files and they will be automatically be seen by your
 environment, even when running from the `chaos` command locally.
 
+### Format
+
+To format your code execute the following:
+
+```console
+$ make fmt
+```
+
+### Lint
+
+To check your code with a linter execute the following:
+
+```console
+$ make lint
+```
+
 ### Test
 
 To run the tests for the project execute the following:
 
-```
+```console
 $ make test
 ```
 
