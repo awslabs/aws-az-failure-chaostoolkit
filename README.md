@@ -31,9 +31,11 @@ pip install -U aws-az-failure-chaostoolkit
 
 ## Usage
 
-### Actions
+To use the actions from this package, add the blocks of code below to your Chaos Toolkit experiment file. Replace `Key1` and `Value1` with the appropriate key-value pair you tagged your resources with. Replace the `az` argument with the target availability zone of your choice.
 
-To use the actions from this package, add the following to your Chaos Toolkit experiment file (replace Key1 and Value1 with the appropriate key-value pair you tagged your resources with):
+### Failure Actions
+
+#### Auto Scaling Group (ASG)
 
 This action removes subnets belonging to the target AZ in all tagged ASGs and suspends AZRebalance process if its running, or updates the min, max and desired capacity to 0 for the ASG if it's only configured for one AZ:
 ```yaml
@@ -50,6 +52,8 @@ This action removes subnets belonging to the target AZ in all tagged ASGs and su
         - Key: "Key1"
           Value: "Value1"
 ```
+
+#### Elastic Compute Cloud (EC2)
 
 This action with network failure will affect tagged/filtered subnets in the target AZ by replacing the current NACL association with a newly created blackhole NACL:
 ```yaml
@@ -87,6 +91,8 @@ This action with instance failure will affect tagged/filtered instances in the t
             - "TagValue1"
 ```
 
+#### Application Load Balancer (ALB)
+
 This action removes subnets from target AZ in tagged application load balancers:
 ```yaml
 - type: action
@@ -102,6 +108,8 @@ This action removes subnets from target AZ in tagged application load balancers:
         - Key: "Key1"
           Value: "Value1"
 ```
+
+#### Classic Load Balancer (CLB)
 
 This action detaches classic load balancers from subnets belonging to target AZ if they are in non-default VPC, and disables target AZ from classic load balancer if they are in a default VPC:
 ```yaml
@@ -119,6 +127,8 @@ This action detaches classic load balancers from subnets belonging to target AZ 
           Value: "Value1"
 ```
 
+#### Relational Database Service (RDS)
+
 This action forces RDS to reboot and failover to another AZ:
 ```yaml
 - type: action
@@ -134,6 +144,8 @@ This action forces RDS to reboot and failover to another AZ:
         - Key: "Key1"
           Value: "Value1"
 ```
+
+#### ElastiCache
 
 This action forces ElastiCache (cluster mode disabled) to failover primary nodes if exists in the target az:
 ```yaml
@@ -172,6 +184,8 @@ This action forces ElastiCache (cluster mode enabled) to failover the shards pro
             - CacheClusterId2
 ```
 
+#### Elastic Kubernetes Service (EKS)
+
 This action removes subnets belonging to the target AZ in all nodegroup ASGs that are part of the tagged EKS clusters and suspends AZRebalance process if its running. Network failure will affect subnets of the nodegroups in the target AZ by associating a newly created blackhole NACL. All its previous NACL association will be replaced with the blackhole NACL:
 ```yaml
 - type: action
@@ -204,6 +218,8 @@ This action removes subnets belonging to the target AZ in all nodegroup ASGs tha
         - Key1: "Value1"
 ```
 
+#### Managed Message Broker Service (MQ)
+
 This action reboots the specified brokers that are tagged, or tagged brokers if broker_ids not specified:
 ```yaml
 - type: action
@@ -221,6 +237,8 @@ This action reboots the specified brokers that are tagged, or tagged brokers if 
         - BrokerId1
         - BrokerId2
 ```
+
+### Tips
 
 * To 'rollback' the changes made by the `fail_az` action, you can use `recover_az` in your experiment template. The `recover_az` function will read the state file generated and rollback if it's a service that's supported.
 * Do also note that by default, the `dry_run` argument for each `fail_az` action is required. Setting it to `True` will only run read-only operations and not impact the target resources. Set it to `False` if you want the actions to make changes your resources. It is best practice to set it on an experiment level under the configuration block and then reference it for every action. 
