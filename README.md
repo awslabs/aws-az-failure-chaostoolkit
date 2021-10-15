@@ -2,11 +2,12 @@
 
 [![Python versions](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/release/python-360/)
 [![PyPi version](https://img.shields.io/pypi/v/aws-az-failure-chaostoolkit.svg)](https://pypi.org/project/aws-az-failure-chaostoolkit/#history)
-![Tests](https://github.com/awslabs/aws-az-failure-chaostoolkit/workflows/tests/badge.svg?branch=main)
-![Lint](https://github.com/awslabs/aws-az-failure-chaostoolkit/workflows/lint/badge.svg?branch=main)
 [![Downloads](https://pepy.tech/badge/aws-az-failure-chaostoolkit)](https://pepy.tech/project/aws-az-failure-chaostoolkit)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+![Lint](https://github.com/awslabs/aws-az-failure-chaostoolkit/workflows/lint/badge.svg?branch=main)
+![Tests](https://github.com/awslabs/aws-az-failure-chaostoolkit/workflows/tests/badge.svg?branch=main)
+![CodeQL](https://github.com/awslabs/aws-az-failure-chaostoolkit/workflows/CodeQL/badge.svg?branch=main)
 
 > Warning: You are strongly advised to only utilize this extension in environments with non-production workloads, as the actions may cause unwanted downtime to your users. Be sure to check if there are any production workloads running in the target AWS account before running Chaos Toolkit experiments with this extension.
 
