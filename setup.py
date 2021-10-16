@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """aws-az-failure-chaostoolkit extension builder and installer"""
 
-import sys
 import io
+import sys
 
 import setuptools
 
@@ -47,7 +47,7 @@ with io.open("requirements.txt") as f:
 
 setup_params = dict(
     name=name,
-    version="0.1.2",
+    version="0.1.3",
     description=desc,
     long_description=long_desc,
     long_description_content_type="text/markdown",
