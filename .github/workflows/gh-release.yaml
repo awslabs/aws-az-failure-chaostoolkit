@@ -20,7 +20,7 @@ jobs:
         pip install setuptools wheel
     - name: Build
       run: python setup.py release
-    - name: Release
+    - name: Publish release
       uses: softprops/action-gh-release@v1
       with:
         files: dist/*
