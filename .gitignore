@@ -108,3 +108,9 @@ ci.bash
 
 # sonarqube
 .scannerwork
+
+# chaostoolkit
+.chaostoolkit
+experiment.yaml
+discovery.json
+journal.json
