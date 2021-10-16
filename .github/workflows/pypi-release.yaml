@@ -1,10 +1,6 @@
 name: PyPi Release
 
-on:
-  release:
-    types: 
-      - created
-      - released
+on: workflow_dispatch
 
 jobs:
   upload:
