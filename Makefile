@@ -9,6 +9,7 @@ install-dev: install
 
 .PHONY: fmt
 fmt:
+	isort .
 	black .
 
 .PHONY: lint

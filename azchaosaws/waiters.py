@@ -1,16 +1,15 @@
 import boto3
-from botocore.waiter import WaiterModel
-from botocore.waiter import create_waiter_with_client
+from botocore.waiter import WaiterModel, create_waiter_with_client
 
 
 def cluster_available_waiter(
     client: boto3.client,
     count: int,
     cache_node_id: str = "0001",
-    delay: int = 30,
-    max_attempts: int = 30,
+    delay: int = 20,
+    max_attempts: int = 50,
 ):
-    """This waiter leverages on the message from describe_events"""
+    """This waiter targets messages from describe_events"""
 
     waiter_name = "ClusterAvailable"
     waiter_config = {

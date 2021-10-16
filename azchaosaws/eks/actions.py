@@ -1,32 +1,32 @@
 # -*- coding: utf-8 -*-
 import os
-import json
+from typing import Any, Dict, List
 
 import boto3
-
-from logzero import logger
-from typing import Any, Dict, List
-from chaoslib.types import Configuration
 from chaoslib.exceptions import FailedActivity
+from chaoslib.types import Configuration
+from logzero import logger
+
 from azchaosaws import client
 from azchaosaws.asg.actions import (
-    get_asg_by_name,
-    remove_az_subnets,
-    describe_subnets,
-    resume_processes,
-    change_subnets,
     asg_in_single_az,
+    change_subnets,
+    describe_subnets,
+    get_asg_by_names,
     modify_capacity,
+    remove_az_subnets,
+    resume_processes,
 )
 from azchaosaws.ec2.actions import (
+    delete_network_acl,
     instance_failure,
+    instance_state,
     network_failure,
     replace_network_acl_association,
-    delete_network_acl,
     start_instances,
     validate_fail_az_path,
 )
-from azchaosaws.ec2.actions import instance_state
+from azchaosaws.helpers import read_state, write_state
 from azchaosaws.utils import args_fmt
 
 __all__ = ["fail_az", "recover_az"]
@@ -187,13 +187,13 @@ def fail_az(
 
                 if asg_in_single_az(client=asg_client, asg=asg):
                     # If ASG is for single AZ
-                    # [WOP] UPDATE ASG CAPACITY TO 0
+                    # UPDATE ASG CAPACITY TO 0
                     results = modify_capacity(
                         client=asg_client, asg=asg, dry_run=dry_run
                     )
                 else:
                     # If ASG is across multiple AZs
-                    # [WOP] CHANGE SUBNETS TO NON TARGET AZ OF ASG FOR EVERY ASG
+                    # CHANGE SUBNETS TO NON TARGET AZ OF ASG FOR EVERY ASG
                     results = remove_az_subnets(
                         asg_client=asg_client,
                         ec2_client=ec2_client,
@@ -229,7 +229,7 @@ def fail_az(
 
                 logger.warning("[EKS] Subnets to be blackholed ({})".format(subnet_ids))
 
-                # [WOP] CREATE AND ASSOCIATE BLACKHOLE ACLS FOR SUBNETS IN EVERY VPC
+                # CREATE AND ASSOCIATE BLACKHOLE ACLS FOR SUBNETS IN EVERY VPC
                 network_failure_response = network_failure(
                     client=ec2_client,
                     vpc_ids=vpc_ids,
@@ -243,7 +243,7 @@ def fail_az(
             elif failure_type == "instance":
                 # Get list of instance IDs attached to ASGs.
                 instance_ids = []
-                asg_response = get_asg_by_name(client=asg_client, asg_names=asgs)
+                asg_response = get_asg_by_names(client=asg_client, asg_names=asgs)
                 for asg in asg_response["AutoScalingGroups"]:
                     instance_ids.extend(
                         [instance["InstanceId"] for instance in asg["Instances"]]
@@ -263,7 +263,7 @@ def fail_az(
                 # Add AZ to filter
                 filters.append({"Name": "availability-zone", "Values": [az]})
 
-                # [WOP] STOP NORMAL/SPOT INSTANCES
+                # STOP NORMAL/SPOT INSTANCES
                 # Forces the instances to stop. The instances do not have an opportunity to flush file system caches or file system metadata. If you use this option,
                 # you must perform file system check and repair procedures. This option is not recommended for Windows instances.
                 instance_failure_response = instance_failure(
@@ -299,7 +299,7 @@ def fail_az(
     fail_az_state["DryRun"] = dry_run
     fail_az_state["Clusters"] = clusters_state
 
-    json.dump(fail_az_state, open(state_path, "w"))
+    write_state(fail_az_state, state_path)
 
     return fail_az_state
 
@@ -324,7 +324,7 @@ def recover_az(
         fail_if_exists=False, path=state_path, service=__package__.split(".", 1)[1]
     )
 
-    fail_az_state = json.load(open(state_path))
+    fail_az_state = read_state(state_path)
 
     # Check if data was for dry run
     if fail_az_state["DryRun"]:
@@ -349,7 +349,7 @@ def recover_az(
                 and instance["After"]["State"] == "stopping"
             ]  # To refactor and compare diff logic with before and after, might be more optimal
 
-            # [WOP] Rollback ASGs
+            # Rollback ASGs
             if target_asgs:
                 for asg in target_asgs:
                     logger.warning(
@@ -412,7 +412,7 @@ def recover_az(
                     "[EKS] ({}) No ASGs to rollback...".format(ng["NodeGroupName"])
                 )
 
-            # [WOP] Rollback subnets ACLs
+            # Rollback subnets ACLs
             if target_subnets:
                 logger.warning(
                     "[EKS] ({}) Based on the state file found, AZ failure rollback will happen for subnets ({})".format(
@@ -449,7 +449,7 @@ def recover_az(
                     "[EKS] ({}) No subnets to rollback...".format(ng["NodeGroupName"])
                 )
 
-            # [WOP] Rollback instances
+            # Rollback instances
             if target_instances:
                 target_instances_ids = [
                     instance["InstanceId"] for instance in target_instances
@@ -585,7 +585,7 @@ def get_asgs_of_nodegroups_by_az(
                 logger.info("[EKS] Checking ASG ({})".format(asg["name"]))
 
                 # Check if ASG contains target AZ
-                asg_response = get_asg_by_name(
+                asg_response = get_asg_by_names(
                     client=asg_client, asg_names=[asg["name"]]
                 )
                 if az in asg_response["AutoScalingGroups"][0]["AvailabilityZones"]:

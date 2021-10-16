@@ -1,7 +1,9 @@
-import os
 import json
-from logzero import logger
+import os
+from typing import Any, Dict
+
 from chaoslib.exceptions import FailedActivity
+from logzero import logger
 
 
 def validate_fail_az_path(fail_if_exists: bool, path: str, service: str) -> str:
@@ -25,7 +27,8 @@ def validate_fail_az_path(fail_if_exists: bool, path: str, service: str) -> str:
 
     # Check if file exists from path, fail activity if it exists.
     if os.path.isfile(path):
-        existing_state = json.load(open(path))
+        with open((path)) as f:
+            existing_state = json.load(f)
         if fail_if_exists:
             # If state is not a dry run, should fail and run rollback action manually
             if not existing_state["DryRun"]:
@@ -43,3 +46,14 @@ def validate_fail_az_path(fail_if_exists: bool, path: str, service: str) -> str:
             )
 
     return path
+
+
+def write_state(state: Dict[str, Any], path: str) -> None:
+    with open((path), "w") as f:
+        json.dump(state, f)
+
+
+def read_state(path: str) -> Dict[str, Any]:
+    with open((path)) as f:
+        state = json.load(f)
+    return state

@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
-from logzero import logger
 from typing import Any, Dict, List
+
 from chaoslib.exceptions import FailedActivity
 from chaoslib.types import Configuration
+from logzero import logger
+
 from azchaosaws import client
 from azchaosaws.utils import args_fmt
 
@@ -86,7 +88,6 @@ def fail_az(
                             )
                         )
                         if not dry_run:
-                            # [WOP]
                             reboot_db_instance_response = rds_client.reboot_db_instance(
                                 DBInstanceIdentifier=db["DBInstanceIdentifier"],
                                 ForceFailover=True,

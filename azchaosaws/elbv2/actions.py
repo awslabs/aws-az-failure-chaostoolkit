@@ -1,17 +1,16 @@
 # -*- coding: utf-8 -*-
-import json
 import os
+from typing import Any, Dict, List
 
 import boto3
-
-from logzero import logger
-from typing import Any, Dict, List
 from botocore.exceptions import ClientError
 from chaoslib.exceptions import FailedActivity
 from chaoslib.types import Configuration
+from logzero import logger
+
 from azchaosaws import client
+from azchaosaws.helpers import read_state, validate_fail_az_path, write_state
 from azchaosaws.utils import args_fmt
-from azchaosaws.helpers import validate_fail_az_path
 
 __all__ = ["fail_az", "recover_az"]
 
@@ -72,7 +71,6 @@ def fail_az(
     )
 
     elbv2_client = client("elbv2", configuration)
-    ec2_client = client("ec2", configuration)
     fail_az_state = {"LoadBalancers": []}
     lbs_state = []
 
@@ -118,17 +116,16 @@ def fail_az(
             logger.info("[ELBV2] Target subnet(s) {}".format(str(target_az_subnets)))
 
             # List of subnets to be changed to
-            subnets = list(original_subnets.difference(target_az_subnets))
+            subnets = sorted(list(original_subnets.difference(target_az_subnets)))
 
             logger.warning(
-                "[ELBV2] Based on config provided, AZ failure simulation will happen in {} for these subnets: {}".format(
-                    az, subnets
+                "[ELBV2] Based on config provided, ALB will change subnets to {}".format(
+                    subnets
                 )
             )
 
             set_subnets(
                 elbv2_client=elbv2_client,
-                ec2_client=ec2_client,
                 load_balancer_names=[lb_block["LoadBalancerName"]],
                 subnet_ids=subnets,
                 dry_run=dry_run,
@@ -154,7 +151,7 @@ def fail_az(
     fail_az_state["DryRun"] = dry_run
     fail_az_state["LoadBalancers"] = lbs_state
 
-    json.dump(fail_az_state, open(state_path, "w"))
+    write_state(fail_az_state, state_path)
 
     return fail_az_state
 
@@ -177,14 +174,13 @@ def recover_az(
         fail_if_exists=False, path=state_path, service=__package__.split(".", 1)[1]
     )
 
-    fail_az_state = json.load(open(state_path))
+    fail_az_state = read_state(state_path)
 
     # Check if data was for dry run
     if fail_az_state["DryRun"]:
         raise FailedActivity("State file was generated from a dry run...")
 
     elbv2_client = client("elbv2", configuration)
-    ec2_client = client("ec2", configuration)
 
     for elb in fail_az_state["LoadBalancers"]:
         logger.warning(
@@ -203,7 +199,6 @@ def recover_az(
             # Change subnets of ELB to subnets before fail_az
             set_subnets(
                 elbv2_client=elbv2_client,
-                ec2_client=ec2_client,
                 load_balancer_names=[elb["LoadBalancerName"]],
                 subnet_ids=elb["Before"]["SubnetIds"],
                 dry_run=False,
@@ -225,20 +220,17 @@ def recover_az(
 
 def set_subnets(
     elbv2_client: boto3.client,
-    ec2_client: boto3.client,
     load_balancer_names: List[str],
     subnet_ids: List[str],
     dry_run: bool = False,
 ) -> None:
 
-    subnet_ids = get_subnets(ec2_client, subnet_ids)
     load_balancers = get_load_balancer_arns(elbv2_client, load_balancer_names)
 
     if load_balancers.get("network", []):
         raise FailedActivity("Cannot set subnets of network load balancers...")
 
     if not dry_run:
-        # [WOP]
         for lb_arn in load_balancers["application"]:
             elbv2_client.set_subnets(LoadBalancerArn=lb_arn, Subnets=subnet_ids)
 
@@ -279,8 +271,13 @@ def get_load_balancer_arns(
 
 def get_subnets(client: boto3.client, subnet_ids: List[str]) -> List[str]:
     try:
-        response = client.describe_subnets(SubnetIds=subnet_ids)["Subnets"]
-        subnet_ids_response = [r["SubnetId"] for r in response]
+        results = []
+        paginator = client.get_paginator("describe_subnets")
+        for p in paginator.paginate(SubnetIds=subnet_ids):
+            for s in p["Subnets"]:
+                results.append(s)
+
+        subnet_ids_response = [r["SubnetId"] for r in results]
     except ClientError as e:
         raise FailedActivity(e.response["Error"]["Message"])
 
