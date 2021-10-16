@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-import boto3
+from typing import Any, Dict, List
 
-from logzero import logger
-from typing import List, Dict, Any
+import boto3
 from chaoslib.exceptions import FailedActivity
 from chaoslib.types import Configuration
+from logzero import logger
+
 from azchaosaws import client
 from azchaosaws.utils import args_fmt
 
@@ -116,7 +117,6 @@ def fail_az(
                 "[MQ] Based on config provided, BROKER ({}) will reboot...".format(b)
             )
             if not dry_run:
-                # [WOP]
                 mq_client.reboot_broker(BrokerId=b)
 
             success_brokers.append(b)

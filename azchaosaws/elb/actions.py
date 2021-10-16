@@ -1,16 +1,15 @@
 # -*- coding: utf-8 -*-
-import json
 import os
+from typing import Any, Dict, List
 
 import boto3
-
-from logzero import logger
-from typing import Any, Dict, List
 from chaoslib.exceptions import FailedActivity
 from chaoslib.types import Configuration
+from logzero import logger
+
 from azchaosaws import client
+from azchaosaws.helpers import read_state, validate_fail_az_path, write_state
 from azchaosaws.utils import args_fmt
-from azchaosaws.helpers import validate_fail_az_path
 
 __all__ = ["fail_az", "recover_az"]
 
@@ -142,7 +141,6 @@ def fail_az(
                 )
 
                 if not dry_run:
-                    # [WOP]
                     remaining_subnets = elb_client.detach_load_balancer_from_subnets(
                         LoadBalancerName=lb, Subnets=target_az_subnets
                     )["Subnets"]
@@ -179,7 +177,6 @@ def fail_az(
             )
 
             if not dry_run:
-                # [WOP]
                 remaining_azs = elb_client.disable_availability_zones_for_load_balancer(
                     LoadBalancerName=lb["LoadBalancerName"], AvailabilityZones=[az]
                 )["AvailabilityZones"]
@@ -197,7 +194,7 @@ def fail_az(
     # Add to state
     fail_az_state["LoadBalancers"] = lbs_state
 
-    json.dump(fail_az_state, open(state_path, "w"))
+    write_state(fail_az_state, state_path)
 
     return fail_az_state
 
@@ -220,7 +217,7 @@ def recover_az(
         fail_if_exists=False, path=state_path, service=__package__.split(".", 1)[1]
     )
 
-    fail_az_state = json.load(open(state_path))
+    fail_az_state = read_state(state_path)
 
     # Check if data was for dry run
     if fail_az_state["DryRun"]:
@@ -331,17 +328,20 @@ def get_lb_subnets_by_az(
     original_subnet_ids, target_az_subnet_ids = [], []
     original_subnet_ids = lb["Subnets"]
 
-    target_az_subnets = ec2_client.describe_subnets(
-        Filters=[
-            {
-                "Name": "availability-zone",
-                "Values": [
-                    az,
-                ],
-            },
-        ],
-        SubnetIds=lb["Subnets"],
-    )["Subnets"]
+    target_az_subnets = []
+    filters = [
+        {
+            "Name": "availability-zone",
+            "Values": [
+                az,
+            ],
+        },
+    ]
+
+    paginator = ec2_client.get_paginator("describe_subnets")
+    for p in paginator.paginate(Filters=filters, SubnetIds=lb["Subnets"]):
+        for s in p["Subnets"]:
+            target_az_subnets.append(s)
 
     if target_az_subnets:
         target_az_subnet_ids = [s["SubnetId"] for s in target_az_subnets]

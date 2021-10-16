@@ -1,17 +1,15 @@
 # -*- coding: utf-8 -*-
 import os
-import json
+from typing import Any, Dict, List
 
 import boto3
-
-from logzero import logger
-from typing import Dict, List, Any
-from azchaosaws import client
 from chaoslib.exceptions import FailedActivity
 from chaoslib.types import Configuration
-from azchaosaws.utils import args_fmt
-from azchaosaws.helpers import validate_fail_az_path
+from logzero import logger
 
+from azchaosaws import client
+from azchaosaws.helpers import read_state, validate_fail_az_path, write_state
+from azchaosaws.utils import args_fmt
 
 __all__ = ["fail_az", "recover_az"]
 
@@ -143,7 +141,7 @@ def fail_az(
     fail_az_state["DryRun"] = dry_run
     fail_az_state["AutoScalingGroups"] = asgs_state
 
-    json.dump(fail_az_state, open(state_path, "w"))
+    write_state(fail_az_state, state_path)
 
     return fail_az_state
 
@@ -166,7 +164,7 @@ def recover_az(
         fail_if_exists=False, path=state_path, service=__package__.split(".", 1)[1]
     )
 
-    fail_az_state = json.load(open(state_path))
+    fail_az_state = read_state(state_path)
 
     # Check if data was for dry run
     if fail_az_state["DryRun"]:
@@ -244,7 +242,7 @@ def recover_az(
 def suspend_processes(
     client: boto3.client, asg_names: List[str], scaling_processes: List[str]
 ) -> None:
-    asgs = get_asg_by_name(client, asg_names)
+    asgs = get_asg_by_names(client, asg_names)
 
     for a in asgs["AutoScalingGroups"]:
         params = dict(
@@ -261,7 +259,7 @@ def suspend_processes(
 def resume_processes(
     client: boto3.client, asg_names: List[str], scaling_processes: List[str]
 ) -> None:
-    asgs = get_asg_by_name(client, asg_names)
+    asgs = get_asg_by_names(client, asg_names)
 
     for a in asgs["AutoScalingGroups"]:
         params = dict(
@@ -278,7 +276,7 @@ def resume_processes(
 
 
 def change_subnets(client: boto3.client, subnets: List[str], asg_names: List[str]):
-    asgs = get_asg_by_name(client, asg_names)
+    asgs = get_asg_by_names(client, asg_names)
 
     for a in asgs["AutoScalingGroups"]:
         client.update_auto_scaling_group(
@@ -287,19 +285,24 @@ def change_subnets(client: boto3.client, subnets: List[str], asg_names: List[str
         )
 
 
-def get_asg_by_name(client: boto3.client, asg_names: List[str]) -> Dict[str, Any]:
+def get_asg_by_names(client: boto3.client, asg_names: List[str]) -> Dict[str, Any]:
     logger.debug("[ASG] Getting ASG(s): {}.".format(asg_names))
 
-    asgs = client.describe_auto_scaling_groups(AutoScalingGroupNames=asg_names)
+    paginator = client.get_paginator("describe_auto_scaling_groups")
+    results = dict(AutoScalingGroups=[])
+    for p in paginator.paginate(AutoScalingGroupNames=asg_names):
+        for a in p["AutoScalingGroups"]:
+            results["AutoScalingGroups"].append(a)
 
-    if not asgs.get("AutoScalingGroups", []):
+    if not results.get("AutoScalingGroups", []):
         logger.warning("[ASG] Unable to find ASG(s): {}".format(asg_names))
 
-    valid_asgs = [a["AutoScalingGroupName"] for a in asgs["AutoScalingGroups"]]
+    valid_asgs = [a["AutoScalingGroupName"] for a in results["AutoScalingGroups"]]
     invalid_asgs = [a for a in asg_names if a not in valid_asgs]
     if invalid_asgs:
         raise FailedActivity("[ASG] Invalid ASG(s): {}".format(invalid_asgs))
-    return asgs
+
+    return results
 
 
 def get_asg_by_tags(client: boto3.client, tags: List[Dict[str, str]]) -> Dict[str, Any]:
@@ -322,7 +325,7 @@ def get_asg_by_tags(client: boto3.client, tags: List[Dict[str, str]]) -> Dict[st
 
     if not results:
         raise FailedActivity("No ASG(s) found with tag(s): {}.".format(tags))
-    return get_asg_by_name(client, list(results))
+    return get_asg_by_names(client, list(results))
 
 
 def get_asgs_by_az(az: str, client: boto3.client) -> List[str]:
@@ -387,25 +390,26 @@ def remove_az_subnets(
     """
 
     results = {}
-    asg_response = get_asg_by_name(client=asg_client, asg_names=[asg])
+    asg_response = get_asg_by_names(client=asg_client, asg_names=[asg])
 
     # Suspend AZRebalance process
     suspended_processes = asg_response["AutoScalingGroups"][0]["SuspendedProcesses"]
     logger.info("[ASG] Suspending AZRebalance processes for ({})".format(asg))
 
     if not dry_run:
-        # WOP
         suspend_processes(
             client=asg_client, asg_names=[asg], scaling_processes=["AZRebalance"]
         )
 
     existing_subnets = asg_response["AutoScalingGroups"][0]["VPCZoneIdentifier"].split(
         ","
-    )  # List of existing subnets
+    )
+
     # Filter subnets that are NOT from the AZ of each ASG (from set a) -> list of subnets for every ASG (set B)
     existing_subnets_full = describe_subnets(
         client=ec2_client, subnet_ids=existing_subnets
     )
+
     non_az_subnets = [
         s["SubnetId"] for s in existing_subnets_full if s["AvailabilityZone"] != az
     ]
@@ -417,7 +421,6 @@ def remove_az_subnets(
     )
 
     if not dry_run:
-        # WOP
         # Change subnets of ASG to only non failed AZ subnets
         asg_client.update_auto_scaling_group(
             AutoScalingGroupName=asg, VPCZoneIdentifier=",".join(non_az_subnets)
@@ -471,7 +474,7 @@ def modify_capacity(
     """
 
     results = {}
-    asg_response = get_asg_by_name(client, asg_names=[asg])
+    asg_response = get_asg_by_names(client, asg_names=[asg])
 
     orig_min_size = asg_response["AutoScalingGroups"][0]["MinSize"]
     orig_max_size = asg_response["AutoScalingGroups"][0]["MaxSize"]
@@ -484,7 +487,6 @@ def modify_capacity(
     )
 
     if not dry_run:
-        # WOP
         # Update ASG min, max and desired to 0
         client.update_auto_scaling_group(
             AutoScalingGroupName=asg,

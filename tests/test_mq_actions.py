@@ -33,7 +33,7 @@ def get_mock_paginate(operation_name):
                                 "BrokerName": "MyBroker",
                                 "BrokerState": "RUNNING",
                                 "DeploymentMode": "ACTIVE_STANDBY_MULTI_AZ",
-                                "EngineType": "ACTIVEMQ",
+                                "EngineType": "ActiveMQ",
                             },
                         ]
                     }

@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
 import math
+from time import process_time, sleep
+from typing import Any, Dict, List
 
 import boto3
-
-from logzero import logger
-from time import sleep
-from time import process_time
-from typing import List, Dict, Any
 from botocore.exceptions import WaiterError
 from chaoslib.exceptions import FailedActivity
 from chaoslib.types import Configuration
+from logzero import logger
+
 from azchaosaws import client
 from azchaosaws.utils import args_fmt
 from azchaosaws.waiters import cluster_available_waiter
@@ -96,7 +95,7 @@ def fail_az(
     }
 
     # Set args for waiter
-    delay, max_attempts = 30, 30
+    delay, max_attempts = 20, 50
     cache_node_id = "0001"
 
     # Get cluster mode enabled|disabled nodes from replication_groups, tags and az provided
@@ -138,17 +137,11 @@ def fail_az(
     cluster_nodes_lookup, non_cluster_nodes_lookup = {}, {}
     for node in nodes:
         if node["ClusterEnabled"]:
-            if not cluster_nodes_lookup.get(node["ReplicationGroupId"], None):
-                cluster_nodes_lookup[node["ReplicationGroupId"]] = []
-                cluster_nodes_lookup[node["ReplicationGroupId"]].append(node)
-            else:
-                cluster_nodes_lookup[node["ReplicationGroupId"]].append(node)
+            cluster_nodes_lookup.setdefault(node["ReplicationGroupId"], []).append(node)
         else:
-            if not non_cluster_nodes_lookup.get(node["ReplicationGroupId"], None):
-                non_cluster_nodes_lookup[node["ReplicationGroupId"]] = []
-                non_cluster_nodes_lookup[node["ReplicationGroupId"]].append(node)
-            else:
-                non_cluster_nodes_lookup[node["ReplicationGroupId"]].append(node)
+            non_cluster_nodes_lookup.setdefault(node["ReplicationGroupId"], []).append(
+                node
+            )
 
     # Log as warning if more than 1 node groups in cluster_nodes_lookup to be failed over in same replication group (cluster) as first node failover must be completed before going to next
     for k in cluster_nodes_lookup.keys():
@@ -173,7 +166,6 @@ def fail_az(
                     )
                 )
                 if not dry_run:
-                    # [WOP]
                     response = ec_client.test_failover(
                         ReplicationGroupId=node["ReplicationGroupId"],
                         NodeGroupId=node["NodeGroupId"],
@@ -194,7 +186,7 @@ def fail_az(
         nodes = cluster_nodes_lookup[replication_group_id]
         # Multiply the delay time for slack
         duration = (delay / 60) * 2
-        while duration < 1:
+        while duration < 2:
             duration *= 2
         duration = int(duration)
         for count, node in enumerate(nodes, start=1):
@@ -205,7 +197,6 @@ def fail_az(
                     )
                 )
                 if not dry_run:
-                    # [WOP]
                     response = ec_client.test_failover(
                         ReplicationGroupId=node["ReplicationGroupId"],
                         NodeGroupId=node["NodeGroupId"],
@@ -215,7 +206,6 @@ def fail_az(
                 success_failover_nodes.append(node)
 
                 if not dry_run:
-                    # [WOP]
                     # Wait for node replacement to complete
                     try:
                         logger.warning(
@@ -265,7 +255,6 @@ def fail_az(
                                     delay * max_attempts
                                 )
                             )
-                    ####
             except Exception as e:
                 failed_nodes.append(node)
                 logger.error(

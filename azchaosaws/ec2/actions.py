@@ -1,20 +1,19 @@
 # -*- coding: utf-8 -*-
-import time
-import json
 import os
-
-import boto3
-
-from logzero import logger
+import time
 from collections import defaultdict
 from copy import deepcopy
 from typing import Any, Dict, List
+
+import boto3
 from botocore.exceptions import ClientError
-from azchaosaws import client
 from chaoslib.exceptions import FailedActivity
 from chaoslib.types import Configuration
+from logzero import logger
+
+from azchaosaws import client
+from azchaosaws.helpers import read_state, validate_fail_az_path, write_state
 from azchaosaws.utils import args_fmt
-from azchaosaws.helpers import validate_fail_az_path
 
 __all__ = ["fail_az", "recover_az"]
 
@@ -163,7 +162,7 @@ def fail_az(
 
         vpc_ids = list(set([subnet["VpcId"] for subnet in subnets]))
 
-        # [WOP] Create and associate blackhole nacls for every subnet in the vpcs
+        # Create and associate blackhole nacls for every subnet in the vpcs
         network_failure_response = network_failure(
             client=ec2_client, vpc_ids=vpc_ids, subnet_ids=subnet_ids, dry_run=dry_run
         )
@@ -184,7 +183,7 @@ def fail_az(
                     {"Name": "instance-state-name", "Values": instance_state_names}
                 )
 
-        # [WOP] Stop normal/spot intances
+        # Stop normal/spot intances
         # If Force is to be set to True, it forces the instances to stop. The instances do not have an opportunity to flush file system caches or file system metadata.
         # If you use this option, you must perform file system check and repair procedures. This option is not recommended for Windows instances.
         instance_failure_response = instance_failure(
@@ -200,7 +199,7 @@ def fail_az(
     fail_az_state["Subnets"] = subnets_state
     fail_az_state["Instances"] = instances_state
 
-    json.dump(fail_az_state, open(state_path, "w"))
+    write_state(fail_az_state, state_path)
 
     return fail_az_state
 
@@ -225,7 +224,7 @@ def recover_az(
         fail_if_exists=False, path=state_path, service=__package__.split(".", 1)[1]
     )
 
-    fail_az_state = json.load(open(state_path))
+    fail_az_state = read_state(state_path)
 
     # Check if data was for dry run
     if fail_az_state["DryRun"]:
@@ -505,9 +504,11 @@ def stop_instances_any_lifecycle(
 
         logger.info("[EC2] Spot request IDs: {}".format(spot_request_ids))
 
-        spot_instance_requests = client.describe_spot_instance_requests(
-            SpotInstanceRequestIds=spot_request_ids
-        )["SpotInstanceRequests"]
+        spot_instance_requests = []
+        paginator = client.get_paginator("describe_spot_instance_requests")
+        for p in paginator.paginate(SpotInstanceRequestIds=spot_request_ids):
+            for s in p["SpotInstanceRequests"]:
+                spot_instance_requests.append(s)
 
         (
             persistent_spot_request_ids,
@@ -764,7 +765,6 @@ def network_failure(
                         and network_acl["VpcId"] == vpc_id
                     ):
                         if not dry_run:
-                            # [WOP]
                             if not blackhole_acl_id:
                                 acl_response = create_network_acl(
                                     client, vpc_id, "blackhole_nacl"
@@ -802,7 +802,6 @@ def network_failure(
                                     rule_action="DENY",
                                 )
 
-                            # [WOP]
                             new_association_id = replace_network_acl_association(
                                 client,
                                 blackhole_acl_id,
@@ -846,7 +845,7 @@ def instance_state(client: boto3.client, state: str, instance_ids: List[str]) ->
     instances = client.describe_instances(InstanceIds=instance_ids)
     logger.debug("[EC2] instances ({})".format(str(instances)))
 
-    if len(instances["Reservations"]) > 0:
+    if instances["Reservations"]:
         for i in instances["Reservations"][0]["Instances"]:
             if i["State"]["Name"] != state:
                 return False

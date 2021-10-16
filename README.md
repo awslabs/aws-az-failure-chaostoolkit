@@ -8,6 +8,7 @@
 ![Lint](https://github.com/awslabs/aws-az-failure-chaostoolkit/workflows/lint/badge.svg?branch=main)
 ![Tests](https://github.com/awslabs/aws-az-failure-chaostoolkit/workflows/tests/badge.svg?branch=main)
 ![CodeQL](https://github.com/awslabs/aws-az-failure-chaostoolkit/workflows/CodeQL/badge.svg?branch=main)
+![Coverage](https://img.shields.io/badge/coverage-70%25-green.svg)
 
 > Warning: You are strongly advised to only utilize this extension in environments with non-production workloads, as the actions may cause unwanted downtime to your users. Be sure to check if there are any production workloads running in the target AWS account before running Chaos Toolkit experiments with this extension.
 
@@ -234,9 +235,6 @@ This action reboots the specified brokers that are tagged, or tagged brokers if 
       dry_run: True
       tags:
         - "TagKey1": "TagValue1"
-      broker_ids: 
-        - BrokerId1
-        - BrokerId2
 ```
 
 ### Tips
@@ -296,4 +294,3 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This project is licensed under the Apache-2.0 License.
-
