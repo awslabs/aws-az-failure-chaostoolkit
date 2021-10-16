@@ -3,7 +3,7 @@ name: Test PyPi Release
 on: workflow_dispatch
 
 jobs:
-  deploy:
+  upload:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,4 +23,4 @@ jobs:
       run: |
         python setup.py release
         twine check dist/*
-        twine upload dist/* --verbose
+        twine upload dist/* -r testpypi --verbose
