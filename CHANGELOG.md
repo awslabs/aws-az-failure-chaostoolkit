@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.1.3][] - 2021-10-16
+[0.1.3]: https://github.com/awslabs/aws-az-failure-chaostoolkit/tree/v0.1.3
+
+### Added
+- Unit tests for rds, elasticache, elb, elbv2, mq, asg, eks
+- Sorting for imports
+  
+### Changed
+- Pinned core dependencies
+- Separated read and write state to helper funcs
+- Standardized usage of pagination API
+- Reduced ElastiCache waiter delay
+
 ## [0.1.2][] - 2021-10-10
 [0.1.2]: https://github.com/awslabs/aws-az-failure-chaostoolkit/tree/v0.1.2
 
