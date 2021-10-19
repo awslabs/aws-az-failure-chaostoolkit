@@ -19,7 +19,8 @@ def fail_az(
     configuration: Configuration = None,
 ) -> Dict[str, Any]:
     """
-    Reboots and forces a failover of your RDS instances (including Aurora single-master clusters) to another AZ. Only RDS instances and/or DB clusters with the corresponding tags and is in the target AZ
+    Reboots and forces a failover of your RDS instances (including Aurora single-master clusters) to another AZ. Only RDS instances
+    and/or DB clusters with the corresponding tags and is in the target AZ
     with Multi-AZ enabled will be impacted.
 
     Parameters:
@@ -139,7 +140,9 @@ def fail_az(
                                 )
                                 break
                         else:
-                            reader_azs.append(resp["DBInstances"][0]["AvailabilityZone"])
+                            reader_azs.append(
+                                resp["DBInstances"][0]["AvailabilityZone"]
+                            )
                     if not any(writer_az == reader_az for reader_az in reader_azs):
                         logger.info(
                             "[RDS] Database cluster %s found with primary in %s",
