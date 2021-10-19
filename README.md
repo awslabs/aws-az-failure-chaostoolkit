@@ -131,7 +131,7 @@ This action detaches classic load balancers from subnets belonging to target AZ 
 
 #### Relational Database Service (RDS)
 
-This action forces RDS to reboot and failover to another AZ:
+This action forces RDS to reboot and failover to another AZ, and/or promotes one of the Aurora Replicas (read-only instances) in the DB cluster to be the primary instance (the cluster writer):
 ```yaml
 - type: action
   name: Simulate AZ Failure for RDS
