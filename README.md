@@ -257,7 +257,7 @@ those dependencies.
 [venv]: http://chaostoolkit.org/reference/usage/install/#create-a-virtual-environment
 
 ```console
-$ make install-dev
+make install-dev
 ```
 
 Now, you can edit the files and they will be automatically be seen by your
@@ -268,7 +268,7 @@ environment, even when running from the `chaos` command locally.
 To format your code execute the following:
 
 ```console
-$ make fmt
+make fmt
 ```
 
 ### Lint
@@ -276,7 +276,7 @@ $ make fmt
 To check your code with a linter execute the following:
 
 ```console
-$ make lint
+make lint
 ```
 
 ### Test
@@ -284,7 +284,7 @@ $ make lint
 To run the tests for the project execute the following:
 
 ```console
-$ make test
+make test
 ```
 
 ## Security
