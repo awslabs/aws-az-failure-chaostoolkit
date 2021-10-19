@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.1.4][] - 2021-10-19
+[0.1.4]: https://github.com/awslabs/aws-az-failure-chaostoolkit/tree/v0.1.4
+
+### Added
+- Support for Aurora cluster failover in rds.actions.fail_az
+  
 ## [0.1.3][] - 2021-10-16
 [0.1.3]: https://github.com/awslabs/aws-az-failure-chaostoolkit/tree/v0.1.3
 
