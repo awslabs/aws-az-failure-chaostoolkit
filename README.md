@@ -13,7 +13,7 @@
 > Warning: You are strongly advised to only utilize this extension in environments with non-production workloads, as the actions may cause unwanted downtime to your users. Be sure to check if there are any production workloads running in the target AWS account before running Chaos Toolkit experiments with this extension.
 
 This project is a collection of [actions][], gathered as an
-extension to the [Chaos Toolkit][chaostoolkit] to simulate an Availability Zone (AZ) failure across multiple AWS services for you to test the resiliency of your hosted applications.
+extension to the [Chaos Toolkit][chaostoolkit] to simulate an Availability Zone (AZ) failure across multiple AWS services for you to test the resiliency of your hosted applications. This project is purposefully built for simulating AZ failures. If you wish to utilize other fault injection actions with Chaos Toolkit, you might want to consider looking at the [Chaos Toolkit Extension for AWS](https://github.com/chaostoolkit-incubator/chaostoolkit-aws) for your experiments.
 
 [actions]: https://chaostoolkit.org/reference/api/experiment/#action
 [chaostoolkit]: https://chaostoolkit.org
@@ -39,7 +39,7 @@ To use the actions from this package, add the blocks of code below to your Chaos
 
 #### Auto Scaling Group (ASG)
 
-This action removes subnets belonging to the target AZ in all tagged ASGs and suspends AZRebalance process if its running, or updates the min, max and desired capacity to 0 for the ASG if it's only configured for one AZ:
+This action removes subnets belonging to the target AZ in all tagged ASGs and suspends the AZRebalance process if its running. If the ASG is only configured for a single AZ, it updates the min, max and desired capacity to 0:
 ```yaml
 - type: action
   name: Simulate AZ Failure for ASG
@@ -57,7 +57,7 @@ This action removes subnets belonging to the target AZ in all tagged ASGs and su
 
 #### Elastic Compute Cloud (EC2)
 
-This action with network failure will affect tagged/filtered subnets in the target AZ by replacing the current NACL association with a newly created blackhole NACL:
+This action with `failure_type` set to `network` will affect tagged/filtered subnets in the target AZ by replacing the current NACL associations with a newly created blackhole NACL:
 ```yaml
 - type: action
   name: Simulate AZ Failure for EC2
@@ -75,7 +75,7 @@ This action with network failure will affect tagged/filtered subnets in the targ
             - "TagValue1"
 ```
 
-This action with instance failure will affect tagged/filtered instances in the target AZ that are in pending/running state by stopping/terminating normal/spot instances:
+This action with `failure_type` set to `instance` will affect tagged/filtered normal/spot instances in the target AZ that are in pending/running state by stopping/terminating them depending on the instance lifecycle:
 ```yaml
 - type: action
   name: Simulate AZ Failure for EC2
@@ -95,7 +95,7 @@ This action with instance failure will affect tagged/filtered instances in the t
 
 #### Application Load Balancer (ALB)
 
-This action removes subnets from target AZ in tagged application load balancers:
+This action removes target AZ subnets in application load balancers:
 ```yaml
 - type: action
   name: Simulate AZ Failure for ALB
@@ -113,7 +113,7 @@ This action removes subnets from target AZ in tagged application load balancers:
 
 #### Classic Load Balancer (CLB)
 
-This action detaches classic load balancers from subnets belonging to target AZ if they are in non-default VPC, and disables target AZ from classic load balancer if they are in a default VPC:
+This action detaches classic load balancers from subnets belonging to target AZ if they are in a non-default VPC and disables the target AZ from classic load balancers if they are in a default VPC:
 ```yaml
 - type: action
   name: Simulate AZ Failure for CLB
@@ -131,7 +131,7 @@ This action detaches classic load balancers from subnets belonging to target AZ 
 
 #### Relational Database Service (RDS)
 
-This action forces RDS to reboot and failover to another AZ, and/or promotes one of the Aurora Replicas (read-only instances) in the DB cluster to be the primary instance (the cluster writer):
+This action forces RDS to reboot and failover to another AZ, and/or promotes one of the Aurora Replicas (read-only instances) in the DB cluster to be the primary instance (cluster writer):
 ```yaml
 - type: action
   name: Simulate AZ Failure for RDS
@@ -149,7 +149,7 @@ This action forces RDS to reboot and failover to another AZ, and/or promotes one
 
 #### ElastiCache
 
-This action forces ElastiCache (cluster mode disabled) to failover primary nodes if exists in the target az:
+This action forces ElastiCache (cluster mode disabled) to failover primary nodes if exists in the target AZ:
 ```yaml
 - type: action
   name: Simulate AZ Failure for ElastiCache (cluster mode disabled)
@@ -165,7 +165,7 @@ This action forces ElastiCache (cluster mode disabled) to failover primary nodes
           Value: "TagValue1"
 ```
 
-This action forces ElastiCache (cluster mode enabled) to failover the shards provided as cache cluster ids (sequential if multiple shards of same cluster) (replace ReplicationGroup1, CacheClusterId1 and CacheClusterId2 if needed):
+This action forces ElastiCache (cluster mode enabled) to failover the shards provided as cache cluster ids (sequential if multiple shards of same cluster) (replace ReplicationGroup1, CacheClusterId1 and CacheClusterId2 as required):
 ```yaml
 - type: action
   name: Simulate AZ Failure for ElastiCache (cluster mode enabled)
@@ -188,7 +188,7 @@ This action forces ElastiCache (cluster mode enabled) to failover the shards pro
 
 #### Elastic Kubernetes Service (EKS)
 
-This action removes subnets belonging to the target AZ in all nodegroup ASGs that are part of the tagged EKS clusters and suspends AZRebalance process if its running. Network failure will affect subnets of the nodegroups in the target AZ by associating a newly created blackhole NACL. All its previous NACL association will be replaced with the blackhole NACL:
+This action removes subnets belonging to the target AZ in all nodegroup ASGs that are part of the tagged EKS clusters and suspends the AZRebalance process if its running. `failure_type` set to `network` will affect target AZ subnets of the nodegroups by associating them with a newly created blackhole NACL. All its previous NACL associations will be replaced with the blackhole NACL:
 ```yaml
 - type: action
   name: Simulate AZ Failure for EKS Clusters
@@ -204,7 +204,7 @@ This action removes subnets belonging to the target AZ in all nodegroup ASGs tha
         - TagKey1: "TagValue1"
 ```
 
-This action removes subnets belonging to the target AZ in all nodegroup ASGs that are part of the tagged EKS clusters and suspends AZRebalance process if its running. Instance failure will affect instances part of the node groups that are in the target AZ that are in pending/running state by stopping normal/spot instances:
+This action removes subnets belonging to the target AZ in all nodegroup ASGs that are part of the tagged EKS clusters and suspends the AZRebalance process if its running.`failure_type` set to `instance` will affect worker nodes that are part of the managed node groups and are in a pending/running state in the target AZ by stopping/terminating normal/spot instances:
 ```yaml
 - type: action
   name: Simulate AZ Failure for EKS Clusters
@@ -234,17 +234,16 @@ This action reboots the specified brokers that are tagged, or tagged brokers if 
       az: "ap-southeast-1a"
       dry_run: True
       tags:
-        - "TagKey1": "TagValue1"
+        - TagKey1: "TagValue1"
 ```
 
 ### Tips
 
-* To 'rollback' the changes made by the `fail_az` action, you can use `recover_az` in your experiment template. The `recover_az` function will read the state file generated and rollback if it's a service that's supported.
+* To 'rollback' the changes made by the `fail_az` action, you can use `recover_az` in your experiment template. The `recover_az` action will read the state file generated and rollback if it's a service that's supported.
 * Do also note that by default, the `dry_run` argument for each `fail_az` action is required. Setting it to `True` will only run read-only operations and not impact the target resources. Set it to `False` if you want the actions to make changes your resources. It is best practice to set it on an experiment level under the configuration block and then reference it for every action. 
 * To have granular filtering of resources, you can also provide a list of tags as part of the argument for the `fail_az` action.
 
 Please explore the code to see existing actions and supported arguments. Alternatively, you can run `chaos discover aws-az-failure-chaostoolkit` to view the list of supported actions along with their required and optional arguments for each service in the generated `discovery.json` file.
-
 
 ## Configuration
 
