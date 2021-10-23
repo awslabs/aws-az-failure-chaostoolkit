@@ -47,7 +47,7 @@ with io.open("requirements.txt") as f:
 
 setup_params = dict(
     name=name,
-    version="0.1.5",
+    version="0.1.6",
     description=desc,
     long_description=long_desc,
     long_description_content_type="text/markdown",
