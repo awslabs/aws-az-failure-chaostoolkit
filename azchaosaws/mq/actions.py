@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from concurrent.futures import wait
+from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Any, Dict, List
 
 import boto3
@@ -16,14 +18,13 @@ __all__ = ["fail_az"]
 def fail_az(
     az: str = None,
     dry_run: bool = None,
-    broker_ids: List[str] = None,
     tags: List[Dict[str, str]] = [{"AZ_FAILURE": "True"}],
     configuration: Configuration = None,
 ) -> Dict[str, Any]:
     """
-    This function forces a reboot for Amazon MQ (ActiveMQ) running brokers that have active-standby setup (ACTIVE_STANDBY_MULTI_AZ).
+    This function forces a reboot for Amazon MQ (ActiveMQ) running brokers that have an active-standby setup (ACTIVE_STANDBY_MULTI_AZ).
     The reboot operation is asynchronous as documented in https://docs.aws.amazon.com/amazon-mq/latest/api-reference/brokers-broker-id-reboot.html#RebootBroker
-    Provide a list of broker_ids to reboot, and ensure these brokers are tagged with the key-value pair provided.
+    Please ensure that your brokers are tagged with the key-value pairs provided.
 
     Parameters:
         Required:
@@ -31,7 +32,6 @@ def fail_az(
             dry_run (bool): The boolean flag to simulate a dry run or not. Setting to True will only run read-only operations and not make changes to resources. (Accepted values: True | False)
 
         Optional:
-            broker_ids (List[str]): List of brokers to reboot
             tags (List[Dict[str, str]]): A list of key-value pairs to filter the broker(s) by. (Default: [{'AZ_FAILURE': 'True'}])
 
     Return Structure:
@@ -61,9 +61,9 @@ def fail_az(
             "To simulate AZ failure, you must specify an Availability Zone"
         )
 
-    logger.info("[MQ] Tags to scan ({})...".format(tags))
-
     mq_client = client("mq", configuration)
+    ec2_client = client("ec2", configuration)
+
     fail_az_state = {
         "AvailabilityZone": az,
         "DryRun": dry_run,
@@ -71,85 +71,85 @@ def fail_az(
     }
 
     logger.info("[MQ] Fetching tagged MQ brokers...")
-    # Tags serve as a layer of protection for resources.
-    tagged_brokers = get_brokers_by_tags(tags=tags, client=mq_client)
-    logger.info("[MQ] Tagged brokers: {}".format(tagged_brokers))
 
-    brokers = []
+    tagged_brokers = get_brokers_by_tags_and_az(
+        mq_client=mq_client, ec2_client=ec2_client, tags=tags, az=az
+    )
 
-    if (
-        broker_ids
-    ):  # If broker_ids provided, get intersection of provided brokers and tagged brokers
-        logger.info(
-            "[MQ] Filtering brokers from provided broker ids ({}) and tagged brokers...".format(
-                broker_ids
-            )
+    activemq_brokers = []
+    success_activemq_brokers, failed_activemq_brokers = [], []
+
+    filtered_brokers = list(
+        filter(
+            lambda x: x["EngineType"] == "ActiveMQ"
+            and x["DeploymentMode"] == "ACTIVE_STANDBY_MULTI_AZ",
+            tagged_brokers,
         )
-        brokers = [tb for tb in tagged_brokers if tb["BrokerId"] in broker_ids]
-    else:  # Otherwise, use tagged brokers
-        logger.info("[MQ] Using tagged brokers as no broker ids provided...")
-        brokers = tagged_brokers[:]
+    )
+    activemq_brokers = [b["BrokerId"] for b in filtered_brokers]
 
-    if not brokers:
-        raise FailedActivity(
-            "No broker(s) with the provided tags and broker ids found..."
-        )
-
-    # Filter only ActiveMQ brokers with ACTIVE_STANDBY_MULTI_AZ
-    target_broker_ids = []
-    target_broker_ids = [
-        b["BrokerId"]
-        for b in brokers
-        if b["EngineType"] == "ActiveMQ"
-        and b["DeploymentMode"] == "ACTIVE_STANDBY_MULTI_AZ"
-    ]
-    logger.info("[MQ] Target broker(s) for reboot ({})".format(str(target_broker_ids)))
-    if not target_broker_ids:
-        raise FailedActivity(
-            "No ActiveMQ broker(s) with ACTIVE_STANDBY_MULTI_AZ found..."
-        )
-
-    success_brokers, failed_brokers = [], []
-
-    for b in target_broker_ids:
-        try:
-            logger.warning(
-                "[MQ] Based on config provided, BROKER ({}) will reboot...".format(b)
-            )
-            if not dry_run:
-                mq_client.reboot_broker(BrokerId=b)
-
-            success_brokers.append(b)
-        except Exception as e:
-            logger.error("[MQ] Failed rebooting broker ({}): {}".format(b, str(e)))
-            failed_brokers.append(b)
-
-    if not success_brokers:
+    if activemq_brokers:
         logger.warning(
-            """[MQ] No broker(s) rebooted... Ensure that the brokers you specified are tagged with the tags you provided or tagged with the default value.
-            Alternatively, if you did not provide broker ids, ensure you have brokers tagged."""
+            "[MQ] Based on the config provided, broker(s) ({}) will reboot".format(
+                str(activemq_brokers)
+            )
         )
     else:
-        logger.info("[MQ] Broker(s) that were rebooted: {}".format(success_brokers))
+        raise FailedActivity(
+            """No ActiveMQ broker(s) with the provided tags and configured with Active-Standby MultiAZ deployment found...
+Ensure that the brokers you specified are tagged with the tags you provided or tagged with the default value."""
+        )
+
+    if not dry_run:
+        executor = ThreadPoolExecutor()
+        futures = [
+            executor.submit(
+                reboot_broker,
+                mq_client,
+                i,
+                success_activemq_brokers,
+                failed_activemq_brokers,
+            )
+            for i in activemq_brokers
+        ]
+        wait(futures)
+
+        if success_activemq_brokers:
+            logger.info(
+                "[MQ] Broker(s) that were rebooted: {} count({})".format(
+                    success_activemq_brokers, len(success_activemq_brokers)
+                )
+            )
+
+        if failed_activemq_brokers:
+            logger.info(
+                "[MQ] Broker(s) that failed to reboot: {} count({})".format(
+                    failed_activemq_brokers, len(failed_activemq_brokers)
+                )
+            )
 
     # Add to state
-    fail_az_state["Brokers"]["Success"]["BrokerIds"] = success_brokers
-    fail_az_state["Brokers"]["Failed"]["BrokerIds"] = failed_brokers
+    fail_az_state["Brokers"]["Success"]["BrokerIds"] = success_activemq_brokers
+    fail_az_state["Brokers"]["Failed"]["BrokerIds"] = failed_activemq_brokers
 
     return fail_az_state
 
 
-def get_brokers_by_tags(
-    tags: List[Dict[str, str]], client: boto3.client
+def get_brokers_by_tags_and_az(
+    mq_client: boto3.client,
+    ec2_client: boto3.client,
+    tags: List[Dict[str, str]],
+    az: str,
 ) -> List[Dict[str, Any]]:
     """Fetch list of brokers that has the specified tags
 
     Args:
         tags (List[Dict[str, str]]): tags to cross check
         client (boto3.client): MQ client
+        az: (str): availability zone
 
     Returns:
-        List[Dict[str, Any]]: list of broker_ids that have the specified tags
+        List[Dict[str, Any]]: list of brokers that have the specified tags
 
     Return Structure:
         [
@@ -160,31 +160,64 @@ def get_brokers_by_tags(
                 'BrokerState': 'CREATION_IN_PROGRESS'|'CREATION_FAILED'|'DELETION_IN_PROGRESS'|'RUNNING'|'REBOOT_IN_PROGRESS',
                 'Created': datetime(2015, 1, 1),
                 'DeploymentMode': 'SINGLE_INSTANCE'|'ACTIVE_STANDBY_MULTI_AZ'|'CLUSTER_MULTI_AZ',
-                'EngineType': 'ACTIVEMQ'|'RABBITMQ',
+                'EngineType': 'ActiveMQ'|'RABBITMQ',
                 'HostInstanceType': str
             },
             ....
         ]
     """
 
-    paginator = client.get_paginator("list_brokers")
+    paginator = mq_client.get_paginator("list_brokers")
     brokers = []
     for p in paginator.paginate():
         brokers = [bs for bs in p["BrokerSummaries"]]
 
     filtered_brokers = []
     for b in brokers:
-        response = client.list_tags(ResourceArn=b["BrokerArn"])
+        response = mq_client.list_tags(ResourceArn=b["BrokerArn"])
 
         if response["Tags"]:
             if all(
                 response["Tags"].get(k, None) == v for t in tags for k, v in t.items()
             ):
+
+                broker_subnet_ids = mq_client.describe_broker(BrokerId=b["BrokerId"])[
+                    "SubnetIds"
+                ]
+
+                az_subnets = ec2_client.describe_subnets(
+                    Filters=[
+                        {"Name": "availability-zone", "Values": [az]},
+                    ],
+                    SubnetIds=broker_subnet_ids,
+                )["Subnets"]
+
+                if not az_subnets:
+                    continue
+
                 filtered_brokers.append(b)
 
     if not filtered_brokers:
         raise FailedActivity(
-            "No broker(s) found with matching tag(s): {}.".format(tags)
+            "No broker(s) found with matching tag(s) and az: {} {}.".format(tags, az)
         )
 
     return filtered_brokers
+
+
+def reboot_broker(
+    client: boto3.client,
+    broker_id: str,
+    success_results: List[str],
+    failed_results: List[str],
+) -> None:
+    try:
+        logger.warning("[MQ] Rebooting broker '{}'".format(broker_id))
+        response = client.reboot_broker(BrokerId=broker_id)
+        logger.debug(response)
+        success_results.append(broker_id)
+    except Exception as e:
+        logger.error(
+            "[MQ] Failed rebooting broker '{}': '{}'".format(broker_id, str(e))
+        )
+        failed_results.append(broker_id)
