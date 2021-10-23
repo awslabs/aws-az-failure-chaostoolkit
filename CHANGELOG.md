@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+## [0.1.6][] - 2021-10-23
+[0.1.6]: https://github.com/awslabs/aws-az-failure-chaostoolkit/tree/v0.1.6
+
 ### Changed
 - Enhancements to rds.actions.fail_az
   
