@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Multithreaded support for io bounded rds tasks
+  
 ## [0.1.4][] - 2021-10-19
 [0.1.4]: https://github.com/awslabs/aws-az-failure-chaostoolkit/tree/v0.1.4
 
