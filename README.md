@@ -222,7 +222,7 @@ This action removes subnets belonging to the target AZ in all nodegroup ASGs tha
 
 #### Managed Message Broker Service (MQ)
 
-This action reboots the specified brokers that are tagged, or tagged brokers if broker_ids not specified:
+This action reboots ActiveMQ brokers that have an active-standby setup:
 ```yaml
 - type: action
   name: Simulate AZ Failure for Amazon MQ (ActiveMQ)
