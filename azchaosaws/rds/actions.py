@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
+from concurrent.futures import wait
+from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Any, Dict, List
 
+import boto3
 from chaoslib.exceptions import FailedActivity
 from chaoslib.types import Configuration
 from logzero import logger
@@ -38,10 +41,12 @@ def fail_az(
             "DBInstances":
                     {
                         "Success": {
-                            "DBInstanceIdentifiers": List[str]
+                            "DBInstanceIdentifiers": List[str],
+                            "DBClusterIdentifiers": List[str]
                         },
                         "Failed": {
-                            "DBInstanceIdentifiers": List[str]
+                            "DBInstanceIdentifiers": List[str],
+                            "DBClusterIdentifiers": List[str]
                         }
                     }
         }
@@ -61,14 +66,16 @@ def fail_az(
         "AvailabilityZone": az,
         "DryRun": dry_run,
         "DBInstances": {
-            "Success": {"DBInstanceIdentifiers": [], "DBClusterIdentifier": []},
-            "Failed": {"DBInstanceIdentifiers": [], "DBClusterIdentifier": []},
+            "Success": {"DBInstanceIdentifiers": [], "DBClusterIdentifiers": []},
+            "Failed": {"DBInstanceIdentifiers": [], "DBClusterIdentifiers": []},
         },
     }
 
     logger.info("[RDS] Fetching DB instances...")
 
+    db_instances, db_clusters = [], []
     success_failover_dbs, failed_dbs = [], []
+    success_failover_clusters, failed_clusters = [], []
 
     paginator = rds_client.get_paginator("describe_db_instances")
 
@@ -81,43 +88,9 @@ def fail_az(
                         db["DBInstanceIdentifier"],
                         db["AvailabilityZone"],
                     )
-
-                    try:
-                        logger.warning(
-                            "[RDS] Based on config provided, RDS {} will reboot with a force failover".format(
-                                db["DBInstanceIdentifier"]
-                            )
-                        )
-                        if not dry_run:
-                            reboot_db_instance_response = rds_client.reboot_db_instance(
-                                DBInstanceIdentifier=db["DBInstanceIdentifier"],
-                                ForceFailover=True,
-                            )
-                            logger.debug(reboot_db_instance_response)
-
-                        success_failover_dbs.append(db["DBInstanceIdentifier"])
-                    except Exception as e:
-                        logger.error(
-                            "failed issuing a reboot of db instance '{}': '{}'".format(
-                                db["DBInstanceIdentifier"], str(e)
-                            )
-                        )
-                        failed_dbs.append(db["DBInstanceIdentifier"])
-
-    if not success_failover_dbs:
-        logger.warning(
-            "[RDS] No DB instances to failover... Ensure that the DBs in the AZ you specified are tagged with the tag filter you provided or tagged with the default value."
-        )
-    else:
-        logger.info(
-            "[RDS] DB instances that was forced to failover: {} count({})".format(
-                success_failover_dbs, len(success_failover_dbs)
-            )
-        )
+                    db_instances.append(db["DBInstanceIdentifier"])
 
     logger.info("[RDS] Fetching DB clusters...")
-
-    success_failover_clusters, failed_clusters = [], []
 
     paginator = rds_client.get_paginator("describe_db_clusters")
 
@@ -144,60 +117,73 @@ def fail_az(
                                 resp["DBInstances"][0]["AvailabilityZone"]
                             )
                     if not any(writer_az == reader_az for reader_az in reader_azs):
-                        logger.info(
+                        logger.debug(
                             "[RDS] Database cluster %s found with primary in %s",
                             cluster["DBClusterIdentifier"],
                             writer_az,
                         )
+                        db_clusters.append(cluster["DBClusterIdentifier"])
 
-                        try:
-                            logger.warning(
-                                "[RDS] Based on config provided, DB cluster {} will failover".format(
-                                    cluster["DBClusterIdentifier"]
-                                )
-                            )
-                            if not dry_run:
-                                failover_db_cluster_response = (
-                                    rds_client.failover_db_cluster(
-                                        DBClusterIdentifier=cluster[
-                                            "DBClusterIdentifier"
-                                        ]
-                                    )
-                                )
-                                logger.debug(failover_db_cluster_response)
-
-                            success_failover_clusters.append(
-                                cluster["DBClusterIdentifier"]
-                            )
-                        except Exception as e:
-                            logger.error(
-                                "failed trying to failover for '{}': '{}'".format(
-                                    cluster["DBClusterIdentifier"], str(e)
-                                )
-                            )
-                            failed_clusters.append(cluster["DBClusterIdentifier"])
-
-    if not success_failover_dbs:
-        logger.warning(
-            "[RDS] No DB instances to failover... Ensure that the DBs in the AZ you specified are tagged with the tag filter you provided or tagged with the default value."
+    logger.warning(
+        "[RDS] Based on config provided, RDS db instance(s) {} will reboot with a force failover".format(
+            db_instances
         )
-    else:
-        logger.info(
-            "[RDS] DB instances that was forced to failover: {} count({})".format(
-                success_failover_dbs, len(success_failover_dbs)
+    )
+
+    logger.warning(
+        "[RDS] Based on config provided, DB cluster(s) {} will failover".format(
+            db_clusters
+        )
+    )
+
+    if not dry_run:
+        executor = ThreadPoolExecutor()
+        reboot_futures = [
+            executor.submit(
+                reboot_db_instance,
+                rds_client,
+                i,
+                True,
+                success_failover_dbs,
+                failed_dbs,
             )
-        )
-
-    if not success_failover_clusters:
-        logger.warning(
-            "[RDS] No DB clusters to failover... Ensure that the DB cluster(s) in with primary in the AZ you specified are tagged with the tag filter you provided or tagged with the default value."
-        )
-    else:
-        logger.info(
-            "[RDS] DB clusters that was forced to failover: {} count({})".format(
-                success_failover_clusters, len(success_failover_clusters)
+            for i in db_instances
+        ]
+        failover_futures = [
+            executor.submit(
+                failover_db_cluster,
+                rds_client,
+                i,
+                success_failover_clusters,
+                failed_clusters,
             )
-        )
+            for i in db_clusters
+        ]
+        futures = [*reboot_futures, *failover_futures]
+        wait(futures)
+
+        if not success_failover_dbs:
+            logger.warning(
+                "[RDS] No DB instances to failover... Ensure that the DBs in the AZ you specified are tagged with the tag filter you provided or tagged with the default value."
+            )
+        else:
+            logger.info(
+                "[RDS] DB instances that was forced to failover: {} count({})".format(
+                    success_failover_dbs, len(success_failover_dbs)
+                )
+            )
+
+        if not success_failover_clusters:
+            logger.warning(
+                """[RDS] No DB clusters to failover... Ensure that the DB cluster(s) in with primary in the AZ you specified are tagged with the tag
+                 filter you provided or tagged with the default value."""
+            )
+        else:
+            logger.info(
+                "[RDS] DB clusters that was forced to failover: {} count({})".format(
+                    success_failover_clusters, len(success_failover_clusters)
+                )
+            )
 
     # Add to state
     fail_az_state["DBInstances"]["Success"][
@@ -205,8 +191,54 @@ def fail_az(
     ] = success_failover_dbs
     fail_az_state["DBInstances"]["Failed"]["DBInstanceIdentifiers"] = failed_dbs
     fail_az_state["DBInstances"]["Success"][
-        "DBClusterIdentifier"
+        "DBClusterIdentifiers"
     ] = success_failover_clusters
-    fail_az_state["DBInstances"]["Failed"]["DBClusterIdentifier"] = failed_clusters
+    fail_az_state["DBInstances"]["Failed"]["DBClusterIdentifiers"] = failed_clusters
 
     return fail_az_state
+
+
+def reboot_db_instance(
+    client: boto3.client,
+    db_instance_identifier: str,
+    force_failover: bool,
+    success_results: List[str],
+    failed_results: List[str],
+) -> None:
+    try:
+        logger.warning(
+            "[RDS] Rebooting RDS db instance {}".format(db_instance_identifier)
+        )
+        response = client.reboot_db_instance(
+            DBInstanceIdentifier=db_instance_identifier,
+            ForceFailover=force_failover,
+        )
+        logger.debug(response)
+        success_results.append(db_instance_identifier)
+    except Exception as e:
+        logger.error(
+            "failed issuing a reboot of db instance '{}': '{}'".format(
+                db_instance_identifier, str(e)
+            )
+        )
+        failed_results.append(db_instance_identifier)
+
+
+def failover_db_cluster(
+    client: boto3.client,
+    db_cluster_identifier: str,
+    success_results: List[str],
+    failed_results: List[str],
+) -> None:
+    try:
+        logger.warning("[RDS] Failing over db cluster {}".format(db_cluster_identifier))
+        response = client.failover_db_cluster(DBClusterIdentifier=db_cluster_identifier)
+        logger.debug(response)
+        success_results.append(db_cluster_identifier)
+    except Exception as e:
+        logger.error(
+            "failed trying to failover for db cluster '{}': '{}'".format(
+                db_cluster_identifier, str(e)
+            )
+        )
+        failed_results.append(db_cluster_identifier)
