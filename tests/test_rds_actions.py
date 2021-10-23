@@ -14,6 +14,15 @@ def test_fail_az_rds_basic(client):
 
     mock_client.get_paginator = get_mock_paginate
 
+    mock_client.describe_db_instances.return_value = {
+        "DBInstances": [
+            {
+                "DBInstanceIdentifier": "my-post-gres-instance-1",
+                "AvailabilityZone": "ap-southeast-1a",
+            },
+        ]
+    }
+
     fail_az(az=az, dry_run=dry_run)
 
     mock_client.reboot_db_instance.assert_called_with(
