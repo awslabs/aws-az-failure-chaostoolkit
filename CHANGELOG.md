@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+- Multithreaded support for io bounded mq tasks
+- Minor refactoring and removal of broker_ids parameter
+  
 ## [0.1.6][] - 2021-10-23
 [0.1.6]: https://github.com/awslabs/aws-az-failure-chaostoolkit/tree/v0.1.6
 
