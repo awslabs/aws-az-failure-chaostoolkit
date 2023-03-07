@@ -1,6 +1,6 @@
 # Chaos Toolkit AZ Failure Extension for AWS
 
-[![Python versions](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/release/python-360/)
+[![Python versions](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/release/python-360/)
 [![PyPi version](https://img.shields.io/pypi/v/aws-az-failure-chaostoolkit.svg)](https://pypi.org/project/aws-az-failure-chaostoolkit/#history)
 [![Downloads](https://pepy.tech/badge/aws-az-failure-chaostoolkit)](https://pepy.tech/project/aws-az-failure-chaostoolkit)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
@@ -20,7 +20,7 @@ extension to the [Chaos Toolkit][chaostoolkit] to simulate an Availability Zone 
 
 ## Install
 
-This package requires Python 3.6 or newer.
+This package requires Python 3.7 or newer.
 
 To be used from your experiment, this package must be installed in the Python
 environment where [chaostoolkit][] already lives.
