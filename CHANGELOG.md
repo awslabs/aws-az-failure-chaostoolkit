@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.1.8][] - 2023-03-07
+[0.1.8]: https://github.com/awslabs/aws-az-failure-chaostoolkit/tree/v0.1.8
+
+### Changed
+- Removed support for python 3.6
+- Pinned chaostoolkit-lib to 1.1.2,<1.31.1 due to a breaking change in the library
+  
 ## [0.1.7][] - 2021-10-24
 [0.1.7]: https://github.com/awslabs/aws-az-failure-chaostoolkit/tree/v0.1.7
 
