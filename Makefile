@@ -11,10 +11,11 @@ install-dev: install
 fmt:
 	isort .
 	black .
+	ruff --fix azchaosaws/ tests/
 
 .PHONY: lint
 lint:
-	flake8 azchaosaws/ tests/ --count --statistics
+	ruff azchaosaws/ tests/
 
 .PHONY: test
 test:

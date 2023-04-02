@@ -1,0 +1,2 @@
+extend-exclude = [".venv"]
+ignore = ["E501"]
