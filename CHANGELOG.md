@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Swaped flake8 for ruff to remove an issue with flake8 being stuck with an
+  old dependency on Python 3.7. Bonus point, ruff is much faster. #12
+- Updated Python version pattern matching in `setup.py` to work with most recent
+  changes in the Python packaging world
+
 ## [0.1.8][] - 2023-03-07
 [0.1.8]: https://github.com/awslabs/aws-az-failure-chaostoolkit/tree/v0.1.8
 
