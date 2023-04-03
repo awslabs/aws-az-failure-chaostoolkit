@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+## [0.1.9][] - 2023-04-03
+[0.1.9]: https://github.com/awslabs/aws-az-failure-chaostoolkit/tree/v0.1.9
+
 ### Changed
 
 - Swaped flake8 for ruff to remove an issue with flake8 being stuck with an
