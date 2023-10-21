@@ -2,8 +2,12 @@
 
 ## [Unreleased]
 
+## [0.1.10][] - 2023-10-21
+[0.1.10]: https://github.com/awslabs/aws-az-failure-chaostoolkit/tree/v0.1.10
+
 ### Changed
 - Added support for AWS Profile
+- Minor type compare changes 
 
 ## [0.1.9][] - 2023-04-03
 [0.1.9]: https://github.com/awslabs/aws-az-failure-chaostoolkit/tree/v0.1.9

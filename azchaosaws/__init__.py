@@ -12,7 +12,7 @@ from chaoslib.types import Configuration, DiscoveredActivities, Discovery
 from logzero import logger
 
 __all__ = ["discover", "__version__", "client"]
-__version__ = "0.1.9"
+__version__ = "0.1.10"
 
 
 def discover(discover_system: bool = True) -> Discovery:
@@ -50,9 +50,7 @@ def client(resource_name: str, configuration: Configuration = None):
     if boto3.DEFAULT_SESSION is None:
         boto3.setup_default_session(profile_name=aws_profile_name, **params)
     logger.debug(
-        "Client will be using profile '{}'".format(
-            aws_profile_name or "default"
-        )
+        "Client will be using profile '{}'".format(aws_profile_name or "default")
     )
     return boto3.client(resource_name, **params)
 
