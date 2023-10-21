@@ -37,6 +37,7 @@ def client(resource_name: str, configuration: Configuration = None):
     params = dict()
 
     region = configuration.get("aws_region")
+    aws_profile_name = configuration.get("aws_profile_name")
     if not region:
         region = os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION"))
         if not region:
@@ -46,9 +47,14 @@ def client(resource_name: str, configuration: Configuration = None):
         logger.debug("Using AWS region '{}'".format(region))
         params["region_name"] = region
 
-    session = boto3.Session(**params)
-
-    return session.client(resource_name, **params)
+    if boto3.DEFAULT_SESSION is None:
+        boto3.setup_default_session(profile_name=aws_profile_name, **params)
+    logger.debug(
+        "Client will be using profile '{}'".format(
+            aws_profile_name or "default"
+        )
+    )
+    return boto3.client(resource_name, **params)
 
 
 ###############################################################################
