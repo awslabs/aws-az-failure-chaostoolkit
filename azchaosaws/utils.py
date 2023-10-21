@@ -4,7 +4,7 @@ import functools
 def args_fmt(fn):
     @functools.wraps(fn)
     def wrapper(**kwargs):
-        if type(kwargs["dry_run"]) == str:
+        if isinstance(kwargs["dry_run"], str):
             kwargs["dry_run"] = (
                 kwargs["dry_run"].lower() == "true"
                 if (
