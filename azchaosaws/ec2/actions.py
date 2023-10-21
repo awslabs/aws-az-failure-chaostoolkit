@@ -477,7 +477,6 @@ def get_instance_lifecycle_by_ids(
 def stop_instances_any_lifecycle(
     client: boto3.client, instance_lifecycles: dict = None, force: bool = False
 ) -> List[Dict[str, Any]]:
-
     results = []
     if "normal" in instance_lifecycles:
         logger.warning(
@@ -841,7 +840,6 @@ def network_failure(
 
 
 def instance_state(client: boto3.client, state: str, instance_ids: List[str]) -> bool:
-
     instances = client.describe_instances(InstanceIds=instance_ids)
     logger.debug("[EC2] instances ({})".format(str(instances)))
 
@@ -888,7 +886,7 @@ def instance_failure(
 
     for instance_response in stop_instances_response:
         instance_state = {}
-        if type(instance_response) == str:
+        if isinstance(instance_response, str):
             if instance_response in dry_run_keys:
                 for id in stop_instances_response[instance_response]:
                     instance_state = {
@@ -897,7 +895,7 @@ def instance_failure(
                         "After": {"State": str()},
                     }
                     results.append(instance_state)
-        elif type(instance_response) == dict:
+        elif isinstance(instance_response, dict):
             for k in instance_response.keys():
                 if k in non_dry_run_keys:
                     for instance in instance_response[k]:
