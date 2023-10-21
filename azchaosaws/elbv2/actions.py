@@ -224,7 +224,6 @@ def set_subnets(
     subnet_ids: List[str],
     dry_run: bool = False,
 ) -> None:
-
     load_balancers = get_load_balancer_arns(elbv2_client, load_balancer_names)
 
     if load_balancers.get("network", []):

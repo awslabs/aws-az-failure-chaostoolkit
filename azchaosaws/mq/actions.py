@@ -180,7 +180,6 @@ def get_brokers_by_tags_and_az(
             if all(
                 response["Tags"].get(k, None) == v for t in tags for k, v in t.items()
             ):
-
                 broker_subnet_ids = mq_client.describe_broker(BrokerId=b["BrokerId"])[
                     "SubnetIds"
                 ]
