@@ -1,3 +1,6 @@
+> **_NOTE:_**  This repository is no longer being used or maintained, and has been archived for historical purposes.
+> You can find the latest changes at https://github.com/chaostoolkit-incubator/aws-az-failure-chaostoolkit
+
 # Chaos Toolkit AZ Failure Extension for AWS
 
 [![Python versions](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/release/python-360/)
